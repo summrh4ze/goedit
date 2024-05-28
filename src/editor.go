@@ -166,7 +166,13 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 	case Ctrl('n'):
 		buffer := getCurrentBuffer(e)
 		if buffer.Cursor.Row < len(buffer.Content)-1 {
-			buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Col}
+			nextLine := buffer.Content[buffer.Cursor.Row+1]
+			if buffer.Cursor.Col > tlen(nextLine, TABSIZE) {
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, tlen(nextLine, TABSIZE)}
+			} else {
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Col}
+			}
+
 			if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
 				buffer.MinDisplayedRow++
 			}
@@ -174,7 +180,13 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 	case Ctrl('p'):
 		buffer := getCurrentBuffer(e)
 		if buffer.Cursor.Row > 0 {
-			buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Col}
+			prevLine := buffer.Content[buffer.Cursor.Row-1]
+			if buffer.Cursor.Col > tlen(prevLine, TABSIZE) {
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(prevLine, TABSIZE)}
+			} else {
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Col}
+			}
+
 			if buffer.Cursor.Row < buffer.MinDisplayedRow {
 				buffer.MinDisplayedRow--
 			}
