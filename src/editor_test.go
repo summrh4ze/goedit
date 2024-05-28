@@ -30,3 +30,32 @@ func TestTlen(t *testing.T) {
 		}
 	}
 }
+
+func TestTexp(t *testing.T) {
+	testData := []struct {
+		str      string
+		tabsize  int
+		expected string
+	}{
+		{"\tHello", 8, "        Hello"},
+		{"\t\tGood morning", 8, "                Good morning"},
+		{"Hello\tGood morning", 8, "Hello   Good morning"},
+		{"Te\t\tst", 8, "Te              st"},
+		{"Te\tst is pa\t!", 8, "Te      st is pa        !"},
+		{"Te\tst is p\ta!", 8, "Te      st is p a!"},
+		{"", 8, ""},
+		{"\t", 8, "        "},
+		{"\t\t", 8, "                "},
+		{"\te", 8, "        e"},
+		{"\tes", 8, "        es"},
+		{"\test", 8, "        est"},
+		{"test with final tab\t", 8, "test with final tab     "},
+	}
+
+	for _, data := range testData {
+		l := texp(data.str, data.tabsize)
+		if l != data.expected {
+			t.Errorf("\"%s\": expected str %s, found %s\n", data.str, data.expected, l)
+		}
+	}
+}

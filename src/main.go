@@ -57,6 +57,10 @@ func main() {
 				editor.handleKeybindInput(keybinding)
 			}
 			window.Timeout(-1)
+		case 27: // Alt-<?>
+			secondKey := window.GetChar()
+			keybinding := fmt.Sprintf("%s %s", goncurses.KeyString(pressedKey), goncurses.KeyString(secondKey))
+			editor.handleKeybindInput(keybinding)
 		default:
 			editor.handleNormalInput(pressedKey)
 		}

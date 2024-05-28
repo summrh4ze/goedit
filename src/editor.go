@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 
@@ -11,6 +12,7 @@ import (
 const (
 	LARGE_FILE = 50 * 1024 * 1024
 	TABSIZE    = 8
+	ALT        = 27
 )
 
 var (
@@ -23,6 +25,7 @@ var (
 	Ctrlx_Ctrlf string = fmt.Sprintf(
 		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('f')),
 	)
+	Altf string = fmt.Sprintf("%s f", goncurses.KeyString(ALT))
 )
 
 type Cursor struct {
@@ -119,7 +122,83 @@ func (e *Editor) handleKeybindInput(keybinding string) {
 			TotalSteps:  1,
 			CurrentStep: 0,
 		}
+	case Altf:
+		buffer := getCurrentBuffer(e)
+		var line string
+		if len(buffer.Content) > buffer.Cursor.Row && buffer.Cursor.Row >= 0 {
+			line = buffer.Content[buffer.Cursor.Row]
+		}
+
+		// need to expand the string before checking characters
+		if buffer.Cursor.Col < tlen(line, TABSIZE) {
+			expLine := texp(line, TABSIZE)
+			row := buffer.Cursor.Row
+			col := buffer.Cursor.Col
+			if expLine[buffer.Cursor.Col] != ' ' {
+				for i := buffer.Cursor.Col + 1; i < len(expLine); i++ {
+					if isDelimiter(expLine[i]) {
+						col = i
+						break
+					}
+				}
+				if col > buffer.Cursor.Col {
+					buffer.Cursor = Cursor{buffer.Cursor.Row, col, col}
+				} else {
+					// word goes until the end of the line so stop at the very end
+					buffer.Cursor = Cursor{buffer.Cursor.Row, tlen(line, TABSIZE), tlen(line, TABSIZE)}
+				}
+			} else {
+				// search for the first non whitespace character
+				for i := buffer.Cursor.Col + 1; i < len(expLine); i++ {
+					if !isDelimiter(expLine[i]) {
+						col = i
+						break
+					}
+				}
+				if col > buffer.Cursor.Col {
+					buffer.Cursor = Cursor{buffer.Cursor.Row, col, col}
+				} else if buffer.Cursor.Row+1 < len(buffer.Content) {
+					// not found on current line search the next line
+					row += 1
+					col = 0
+					nextLine := buffer.Content[buffer.Cursor.Row+1]
+					nexpLine := texp(nextLine, TABSIZE)
+					for i := 0; i < len(nexpLine); i++ {
+						if !isDelimiter(nexpLine[i]) {
+							col = i
+							break
+						}
+					}
+					buffer.Cursor = Cursor{row, col, col}
+				}
+			}
+		} else if tlen(line, TABSIZE) == 0 || buffer.Cursor.Col == tlen(line, TABSIZE) {
+			if buffer.Cursor.Row+1 < len(buffer.Content) {
+				nexpLine := texp(buffer.Content[buffer.Cursor.Row+1], TABSIZE)
+				col := 0
+				for i := 0; i < len(nexpLine); i++ {
+					if !isDelimiter(nexpLine[i]) {
+						col = i
+						break
+					}
+				}
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, col, col}
+			}
+		}
+		if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
+			buffer.MinDisplayedRow++
+		}
 	}
+}
+
+func isDelimiter(b byte) bool {
+	delimiters := []byte(" `~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?")
+	for _, c := range delimiters {
+		if b == c {
+			return true
+		}
+	}
+	return false
 }
 
 func tlen(str string, tabsize int) int {
@@ -149,6 +228,35 @@ func tlen(str string, tabsize int) int {
 		}
 	}
 	return tlen
+}
+
+func texp(str string, tabsize int) string {
+	res := ""
+	if str == "" {
+		return res
+	}
+
+	nonTabs := 0
+	if str[0] != '\t' {
+		nonTabs = 1
+		res += string(str[0])
+	} else {
+		res += string(bytes.Repeat([]byte(" "), tabsize))
+	}
+	prevChar := str[0]
+	for i := 1; i < len(str); i++ {
+		if str[i] == '\t' && prevChar == '\t' {
+			res += string(bytes.Repeat([]byte(" "), tabsize))
+			prevChar = str[i]
+		} else if str[i] == '\t' && prevChar != '\t' {
+			res += string(bytes.Repeat([]byte(" "), tabsize-nonTabs%tabsize))
+			nonTabs = 0
+		} else if str[i] != '\t' {
+			res += string(str[i])
+			nonTabs += 1
+		}
+	}
+	return res
 }
 
 func (e *Editor) handleNormalInput(key goncurses.Key) {
