@@ -16,8 +16,8 @@ var (
 	Ctrlx_Ctrlc string = fmt.Sprintf(
 		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('c')),
 	)
-	Ctrlx_Ctrlk string = fmt.Sprintf(
-		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('k')),
+	Ctrlx_k string = fmt.Sprintf(
+		"%s k", goncurses.KeyString(Ctrl('x')),
 	)
 	Ctrlx_Ctrlf string = fmt.Sprintf(
 		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('f')),
@@ -96,7 +96,7 @@ func (e *Editor) handleKeybindInput(keybinding string) {
 	switch keybinding {
 	case Ctrlx_Ctrlc:
 		e.Closed = true
-	case Ctrlx_Ctrlk:
+	case Ctrlx_k:
 		if len(e.OpenBuffers) < 2 {
 			e.Closed = true
 		} else {
@@ -160,8 +160,15 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 func (e *Editor) OpenBuffer(path string) error {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
-		fmt.Println(err)
-		return err
+		// open a fake file. It will be created at first save
+		e.OpenBuffers = append(e.OpenBuffers, &Buffer{
+			ReadOnlyMode:    false,
+			Content:         make([]string, 0),
+			Cursor:          Cursor{0, 0},
+			MinDisplayedRow: 0,
+		})
+		e.CurrentBuffer = len(e.OpenBuffers) - 1
+		return nil
 	}
 	fileSize := fileInfo.Size()
 	readOnlyMode := false
@@ -207,8 +214,10 @@ func (e *Editor) UpdateMinibuffer() {
 	case "openBuffer":
 		if e.completedMinibufferContext() {
 			e.OpenBuffer(e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep-1].Input)
-			e.MinibufferContext = MinibufferContext{}
+			e.MinibufferContext = MinibufferContext{Type: "done", TotalSteps: 1, CurrentStep: 1}
 		}
+	case "done":
+		e.MinibufferContext = MinibufferContext{}
 	}
 }
 
@@ -217,6 +226,10 @@ func (e *Editor) minibufferDisplay(miniWin *goncurses.Window) {
 		currentStep := e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep]
 		miniWin.Erase()
 		miniWin.MovePrintf(0, 0, "%s%s", currentStep.Label, currentStep.Input)
+		miniWin.Refresh()
+	} else if e.completedMinibufferContext() && e.MinibufferContext.Type == "done" {
+		miniWin.Erase()
+		miniWin.MovePrint(0, 0, "DONE")
 		miniWin.Refresh()
 	}
 }
