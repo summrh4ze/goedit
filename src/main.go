@@ -17,19 +17,37 @@ func main() {
 		log.Fatal("init:", err)
 	}
 	defer goncurses.End()
+
 	goncurses.CBreak(true)
 	goncurses.Echo(false)
 	goncurses.Raw(true)
+	//goncurses.InitColor(1, 1000, 0, 0)
+	goncurses.StartColor()
+	goncurses.InitPair(1, goncurses.C_BLUE, goncurses.C_RED)
+
 	window.ScrollOk(true)
 
-	editor := CreateEditor(window)
+	maxRows, maxCols := window.MaxYX()
+	mainWindowRows := maxRows - 1
+	window.Resize(mainWindowRows, maxCols)
+
+	subwindow, err := goncurses.NewWindow(1, maxCols, mainWindowRows, 0)
+	if err != nil {
+		log.Fatal(err)
+	}
+	subwindow.ColorOn(1)
+	subwindow.SetBackground(goncurses.ColorPair(1))
+	subwindow.MovePrint(0, 0, "MINIBUFFER")
+	subwindow.Refresh()
+
+	editor := CreateEditor(mainWindowRows)
+
 	editor.OpenBuffer("src/editor.go")
 
 	// first render
-	editor.Display(window)
+	editor.Display(window, subwindow)
 
 	for !editor.Closed {
-		// handle input
 		pressedKey := window.GetChar()
 		switch pressedKey {
 		case Ctrl('x'):
@@ -38,18 +56,16 @@ func main() {
 			secondKey := window.GetChar()
 			if secondKey != 0 {
 				keybinding := fmt.Sprintf("%s %s", goncurses.KeyString(pressedKey), goncurses.KeyString(secondKey))
-				editor.handleInput(keybinding)
-			} else {
-				editor.handleInput(goncurses.KeyString(pressedKey))
+				editor.handleKeybindInput(keybinding)
 			}
 			window.Timeout(-1)
-		case Ctrl('h'):
-			editor.handleInput("^H")
 		default:
-			editor.handleInput(goncurses.KeyString(pressedKey))
+			editor.handleNormalInput(pressedKey)
 		}
 
+		editor.UpdateMinibuffer()
+
 		// display text
-		editor.Display(window)
+		editor.Display(window, subwindow)
 	}
 }

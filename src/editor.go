@@ -19,8 +19,9 @@ var (
 	Ctrlx_Ctrlk string = fmt.Sprintf(
 		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('k')),
 	)
-	Ctrln string = goncurses.KeyString(Ctrl('n'))
-	Ctrlp string = goncurses.KeyString(Ctrl('p'))
+	Ctrlx_Ctrlf string = fmt.Sprintf(
+		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('f')),
+	)
 )
 
 type Cursor struct {
@@ -35,100 +36,124 @@ type Buffer struct {
 	MinDisplayedRow int
 }
 
-type EditorAction struct {
-	Name     string
-	Callback func()
+type MinibufferActionStep struct {
+	Label string
+	Input string
+}
+
+type MinibufferContext struct {
+	Type        string
+	Steps       []MinibufferActionStep
+	TotalSteps  int
+	CurrentStep int
 }
 
 type Editor struct {
-	Closed        bool
-	Keybindings   map[string]*EditorAction
-	OpenBuffers   []*Buffer
-	CurrentBuffer int
-	MaxRows       int
+	Closed            bool
+	MinibufferContext MinibufferContext
+	OpenBuffers       []*Buffer
+	CurrentBuffer     int
+	MaxRows           int
+}
+
+func NewEmptyBuffer() *Buffer {
+	return &Buffer{
+		Content:         make([]string, 0),
+		ReadOnlyMode:    false,
+		Cursor:          Cursor{0, 0},
+		MinDisplayedRow: 0,
+	}
 }
 
 func getCurrentBuffer(editor *Editor) *Buffer {
 	if editor.CurrentBuffer >= 0 && editor.CurrentBuffer < len(editor.OpenBuffers) {
 		return editor.OpenBuffers[editor.CurrentBuffer]
 	} else {
-		return &Buffer{
-			Content:         make([]string, 0),
-			ReadOnlyMode:    false,
-			Cursor:          Cursor{0, 0},
-			MinDisplayedRow: 0,
+		return NewEmptyBuffer()
+	}
+}
+
+func CreateEditor(maxRows int) *Editor {
+	editor := &Editor{
+		Closed:            false,
+		OpenBuffers:       make([]*Buffer, 0, 1),
+		CurrentBuffer:     -1,
+		MaxRows:           maxRows,
+		MinibufferContext: MinibufferContext{},
+	}
+	return editor
+}
+
+func (e *Editor) hasMinibufferContext() bool {
+	return e.MinibufferContext.TotalSteps > 0 && e.MinibufferContext.CurrentStep < e.MinibufferContext.TotalSteps
+}
+
+func (e *Editor) completedMinibufferContext() bool {
+	return e.MinibufferContext.TotalSteps > 0 && e.MinibufferContext.CurrentStep == e.MinibufferContext.TotalSteps
+}
+
+func (e *Editor) handleKeybindInput(keybinding string) {
+	switch keybinding {
+	case Ctrlx_Ctrlc:
+		e.Closed = true
+	case Ctrlx_Ctrlk:
+		if len(e.OpenBuffers) < 2 {
+			e.Closed = true
+		} else {
+			if e.CurrentBuffer > 0 {
+				e.OpenBuffers = append(
+					e.OpenBuffers[0:e.CurrentBuffer],
+					e.OpenBuffers[e.CurrentBuffer+1:]...,
+				)
+				e.CurrentBuffer = e.CurrentBuffer - 1
+			} else { // CurrentBuffer = 0
+				e.OpenBuffers = e.OpenBuffers[1:]
+			}
+		}
+	case Ctrlx_Ctrlf:
+		e.MinibufferContext = MinibufferContext{
+			Type:        "openBuffer",
+			Steps:       []MinibufferActionStep{{Label: "Open file: "}},
+			TotalSteps:  1,
+			CurrentStep: 0,
 		}
 	}
 }
 
-func initKeybindings(editor *Editor) {
-	editor.Keybindings[Ctrlx_Ctrlc] = &EditorAction{
-		Name:     "Close Editor",
-		Callback: func() { editor.Closed = true },
-	}
-
-	editor.Keybindings[Ctrlx_Ctrlk] = &EditorAction{
-		Name: "Close Buffer",
-		Callback: func() {
-			if len(editor.OpenBuffers) < 2 {
-				editor.Closed = true
-			} else {
-				if editor.CurrentBuffer > 0 {
-					editor.OpenBuffers = append(
-						editor.OpenBuffers[0:editor.CurrentBuffer],
-						editor.OpenBuffers[editor.CurrentBuffer+1:]...,
-					)
-					editor.CurrentBuffer = editor.CurrentBuffer - 1
-				} else { // CurrentBuffer = 0
-					editor.OpenBuffers = editor.OpenBuffers[1:]
-				}
+func (e *Editor) handleNormalInput(key goncurses.Key) {
+	switch key {
+	case goncurses.KEY_ENTER, 10:
+		if e.hasMinibufferContext() {
+			e.MinibufferContext.CurrentStep += 1
+		}
+	case goncurses.KEY_BACKSPACE, 127, '\b':
+		if e.hasMinibufferContext() {
+			input := e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep].Input
+			if len(input) > 0 {
+				e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep].Input = input[:len(input)-1]
 			}
-		},
-	}
-
-	editor.Keybindings[Ctrln] = &EditorAction{
-		Name: "Move Cursor Down",
-		Callback: func() {
-			buffer := getCurrentBuffer(editor)
-			if buffer.Cursor.Row < len(buffer.Content)-1 {
-				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Col}
-				if buffer.Cursor.Row >= buffer.MinDisplayedRow+editor.MaxRows {
-					buffer.MinDisplayedRow++
-				}
+		}
+	case Ctrl('n'):
+		buffer := getCurrentBuffer(e)
+		if buffer.Cursor.Row < len(buffer.Content)-1 {
+			buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Col}
+			if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
+				buffer.MinDisplayedRow++
 			}
-		},
-	}
-
-	editor.Keybindings[Ctrlp] = &EditorAction{
-		Name: "Move Cursor Up",
-		Callback: func() {
-			buffer := getCurrentBuffer(editor)
-			if buffer.Cursor.Row > 0 {
-				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Col}
-				if buffer.Cursor.Row < buffer.MinDisplayedRow {
-					buffer.MinDisplayedRow--
-				}
+		}
+	case Ctrl('p'):
+		buffer := getCurrentBuffer(e)
+		if buffer.Cursor.Row > 0 {
+			buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Col}
+			if buffer.Cursor.Row < buffer.MinDisplayedRow {
+				buffer.MinDisplayedRow--
 			}
-		},
-	}
-}
-
-func CreateEditor(window *goncurses.Window) *Editor {
-	maxRows, _ := window.MaxYX()
-	editor := &Editor{
-		Closed:        false,
-		OpenBuffers:   make([]*Buffer, 0, 1),
-		Keybindings:   make(map[string]*EditorAction),
-		CurrentBuffer: -1,
-		MaxRows:       maxRows,
-	}
-	initKeybindings(editor)
-	return editor
-}
-
-func (e *Editor) handleInput(keybinding string) {
-	if editorAction, ok := e.Keybindings[keybinding]; ok {
-		editorAction.Callback()
+		}
+	default:
+		if e.hasMinibufferContext() {
+			input := e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep].Input
+			e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep].Input = input + goncurses.KeyString(key)
+		}
 	}
 }
 
@@ -157,7 +182,6 @@ func (e *Editor) OpenBuffer(path string) error {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		//fmt.Println(line)
 		content = append(content, line)
 	}
 
@@ -178,23 +202,44 @@ func (e *Editor) OpenBuffer(path string) error {
 	return nil
 }
 
-func (e *Editor) Display(window *goncurses.Window) {
-	if e.CurrentBuffer >= 0 && e.CurrentBuffer < len(e.OpenBuffers) {
-		e.OpenBuffers[e.CurrentBuffer].Display(window)
+func (e *Editor) UpdateMinibuffer() {
+	switch e.MinibufferContext.Type {
+	case "openBuffer":
+		if e.completedMinibufferContext() {
+			e.OpenBuffer(e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep-1].Input)
+			e.MinibufferContext = MinibufferContext{}
+		}
 	}
 }
 
-func (b *Buffer) Display(window *goncurses.Window) {
-	window.Erase()
+func (e *Editor) minibufferDisplay(miniWin *goncurses.Window) {
+	if e.hasMinibufferContext() {
+		currentStep := e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep]
+		miniWin.Erase()
+		miniWin.MovePrintf(0, 0, "%s%s", currentStep.Label, currentStep.Input)
+		miniWin.Refresh()
+	}
+}
 
-	maxRows, _ := window.MaxYX()
+func (e *Editor) Display(mainWin, miniWin *goncurses.Window) {
+	if e.CurrentBuffer >= 0 && e.CurrentBuffer < len(e.OpenBuffers) {
+		if !e.hasMinibufferContext() {
+			e.OpenBuffers[e.CurrentBuffer].Display(mainWin)
+		}
+	}
+	e.minibufferDisplay(miniWin)
+}
+
+func (b *Buffer) Display(bufferWin *goncurses.Window) {
+	bufferWin.Erase()
+
+	maxRows, _ := bufferWin.MaxYX()
 	for i := b.MinDisplayedRow; i < b.MinDisplayedRow+maxRows; i++ {
 		if i < len(b.Content) {
-			window.MovePrint(i-b.MinDisplayedRow, 0, b.Content[i])
+			bufferWin.MovePrint(i-b.MinDisplayedRow, 0, b.Content[i])
 		}
 	}
 
 	// convert cursor to relative to rows boundary
-	window.Move(b.Cursor.Row-b.MinDisplayedRow, b.Cursor.Col)
-
+	bufferWin.Move(b.Cursor.Row-b.MinDisplayedRow, b.Cursor.Col)
 }
