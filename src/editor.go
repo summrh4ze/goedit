@@ -28,6 +28,7 @@ var (
 type Cursor struct {
 	Row int
 	Col int
+	Mem int
 }
 
 type Buffer struct {
@@ -61,7 +62,7 @@ func NewEmptyBuffer() *Buffer {
 	return &Buffer{
 		Content:         []string{"\tGOEdit!", "To open a file use Ctrl-X Ctrl-F"},
 		ReadOnlyMode:    false,
-		Cursor:          Cursor{0, 0},
+		Cursor:          Cursor{0, 0, 0},
 		MinDisplayedRow: 0,
 	}
 }
@@ -167,10 +168,12 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 		buffer := getCurrentBuffer(e)
 		if buffer.Cursor.Row < len(buffer.Content)-1 {
 			nextLine := buffer.Content[buffer.Cursor.Row+1]
-			if buffer.Cursor.Col > tlen(nextLine, TABSIZE) {
-				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, tlen(nextLine, TABSIZE)}
+			if buffer.Cursor.Col > tlen(nextLine, TABSIZE) || buffer.Cursor.Mem > tlen(nextLine, TABSIZE) {
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, tlen(nextLine, TABSIZE), buffer.Cursor.Mem}
+			} else if buffer.Cursor.Mem < buffer.Cursor.Col {
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Col, buffer.Cursor.Mem}
 			} else {
-				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Col}
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, buffer.Cursor.Mem, buffer.Cursor.Mem}
 			}
 
 			if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
@@ -181,10 +184,12 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 		buffer := getCurrentBuffer(e)
 		if buffer.Cursor.Row > 0 {
 			prevLine := buffer.Content[buffer.Cursor.Row-1]
-			if buffer.Cursor.Col > tlen(prevLine, TABSIZE) {
-				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(prevLine, TABSIZE)}
+			if buffer.Cursor.Col > tlen(prevLine, TABSIZE) || buffer.Cursor.Mem > tlen(prevLine, TABSIZE) {
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(prevLine, TABSIZE), buffer.Cursor.Mem}
+			} else if buffer.Cursor.Mem < buffer.Cursor.Col {
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Col, buffer.Cursor.Mem}
 			} else {
-				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Col}
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, buffer.Cursor.Mem, buffer.Cursor.Mem}
 			}
 
 			if buffer.Cursor.Row < buffer.MinDisplayedRow {
@@ -198,10 +203,10 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 			line = buffer.Content[buffer.Cursor.Row]
 		}
 		if buffer.Cursor.Col < tlen(line, TABSIZE) {
-			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col + 1}
+			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col + 1, buffer.Cursor.Col + 1}
 		} else if tlen(line, TABSIZE) == 0 || buffer.Cursor.Col == tlen(line, TABSIZE) {
 			if buffer.Cursor.Row+1 < len(buffer.Content) {
-				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, 0}
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, 0, 0}
 			}
 		}
 		if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
@@ -214,9 +219,9 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 			line = buffer.Content[buffer.Cursor.Row-1]
 		}
 		if buffer.Cursor.Col > 0 {
-			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col - 1}
+			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col - 1, buffer.Cursor.Col - 1}
 		} else if buffer.Cursor.Col == 0 && buffer.Cursor.Row-1 >= 0 {
-			buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE)}
+			buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE), tlen(line, TABSIZE)}
 		}
 		if buffer.Cursor.Row < buffer.MinDisplayedRow {
 			buffer.MinDisplayedRow--
@@ -236,7 +241,7 @@ func (e *Editor) OpenBuffer(path string) error {
 		e.OpenBuffers = append(e.OpenBuffers, &Buffer{
 			ReadOnlyMode:    false,
 			Content:         []string{""},
-			Cursor:          Cursor{0, 0},
+			Cursor:          Cursor{0, 0, 0},
 			MinDisplayedRow: 0,
 		})
 		e.CurrentBuffer = len(e.OpenBuffers) - 1
@@ -273,7 +278,7 @@ func (e *Editor) OpenBuffer(path string) error {
 	e.OpenBuffers = append(e.OpenBuffers, &Buffer{
 		ReadOnlyMode:    readOnlyMode,
 		Content:         content,
-		Cursor:          Cursor{0, 0},
+		Cursor:          Cursor{0, 0, 0},
 		MinDisplayedRow: 0,
 	})
 	e.CurrentBuffer = len(e.OpenBuffers) - 1
