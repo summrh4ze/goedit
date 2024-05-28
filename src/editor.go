@@ -26,6 +26,7 @@ var (
 		"%s %s", goncurses.KeyString(Ctrl('x')), goncurses.KeyString(Ctrl('f')),
 	)
 	Altf string = fmt.Sprintf("%s f", goncurses.KeyString(ALT))
+	Altb string = fmt.Sprintf("%s b", goncurses.KeyString(ALT))
 )
 
 type Cursor struct {
@@ -188,6 +189,8 @@ func (e *Editor) handleKeybindInput(keybinding string) {
 		if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
 			buffer.MinDisplayedRow++
 		}
+		//case Altb:
+
 	}
 }
 
@@ -334,6 +337,32 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 		if buffer.Cursor.Row < buffer.MinDisplayedRow {
 			buffer.MinDisplayedRow--
 		}
+	case Ctrl('a'):
+		buffer := getCurrentBuffer(e)
+		var line string
+		if len(buffer.Content) > buffer.Cursor.Row && buffer.Cursor.Row >= 0 {
+			line = buffer.Content[buffer.Cursor.Row]
+		}
+		expLine := texp(line, TABSIZE)
+		firstNonWh := 0
+		for i := 0; i < len(expLine); i++ {
+			if expLine[i] != ' ' {
+				firstNonWh = i
+				break
+			}
+		}
+		if buffer.Cursor.Col == 0 || buffer.Cursor.Col > firstNonWh {
+			buffer.Cursor = Cursor{buffer.Cursor.Row, firstNonWh, firstNonWh}
+		} else {
+			buffer.Cursor = Cursor{buffer.Cursor.Row, 0, 0}
+		}
+	case Ctrl('e'):
+		buffer := getCurrentBuffer(e)
+		var line string
+		if len(buffer.Content) > buffer.Cursor.Row && buffer.Cursor.Row >= 0 {
+			line = buffer.Content[buffer.Cursor.Row]
+		}
+		buffer.Cursor = Cursor{buffer.Cursor.Row, tlen(line, TABSIZE), tlen(line, TABSIZE)}
 	default:
 		if e.hasMinibufferContext() {
 			input := e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep].Input
