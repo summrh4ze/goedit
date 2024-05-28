@@ -10,6 +10,7 @@ import (
 
 const (
 	LARGE_FILE = 50 * 1024 * 1024
+	TABSIZE    = 8
 )
 
 var (
@@ -58,7 +59,7 @@ type Editor struct {
 
 func NewEmptyBuffer() *Buffer {
 	return &Buffer{
-		Content:         make([]string, 0),
+		Content:         []string{"\tGOEdit!", "To open a file use Ctrl-X Ctrl-F"},
 		ReadOnlyMode:    false,
 		Cursor:          Cursor{0, 0},
 		MinDisplayedRow: 0,
@@ -76,8 +77,8 @@ func getCurrentBuffer(editor *Editor) *Buffer {
 func CreateEditor(maxRows int) *Editor {
 	editor := &Editor{
 		Closed:            false,
-		OpenBuffers:       make([]*Buffer, 0, 1),
-		CurrentBuffer:     -1,
+		OpenBuffers:       []*Buffer{NewEmptyBuffer()},
+		CurrentBuffer:     0,
 		MaxRows:           maxRows,
 		MinibufferContext: MinibufferContext{},
 	}
@@ -120,6 +121,35 @@ func (e *Editor) handleKeybindInput(keybinding string) {
 	}
 }
 
+func tlen(str string, tabsize int) int {
+	tlen := 0
+	if str == "" {
+		return tlen
+	}
+
+	nonTabs := 0
+	if str[0] != '\t' {
+		nonTabs = 1
+		tlen += 1
+	} else {
+		tlen += tabsize
+	}
+	prevChar := str[0]
+	for i := 1; i < len(str); i++ {
+		if str[i] == '\t' && prevChar == '\t' {
+			tlen += tabsize
+			prevChar = str[i]
+		} else if str[i] == '\t' && prevChar != '\t' {
+			tlen += tabsize - nonTabs%tabsize
+			nonTabs = 0
+		} else if str[i] != '\t' {
+			tlen += 1
+			nonTabs += 1
+		}
+	}
+	return tlen
+}
+
 func (e *Editor) handleNormalInput(key goncurses.Key) {
 	switch key {
 	case goncurses.KEY_ENTER, 10:
@@ -149,6 +179,40 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 				buffer.MinDisplayedRow--
 			}
 		}
+	case Ctrl('f'):
+		buffer := getCurrentBuffer(e)
+		var line string
+		if len(buffer.Content) > buffer.Cursor.Row && buffer.Cursor.Row >= 0 {
+			line = buffer.Content[buffer.Cursor.Row]
+		}
+		if buffer.Cursor.Col < tlen(line, TABSIZE)-1 {
+			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col + 1}
+		} else if tlen(line, TABSIZE) == 0 || buffer.Cursor.Col == tlen(line, TABSIZE)-1 {
+			if buffer.Cursor.Row+1 < len(buffer.Content) {
+				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, 0}
+			}
+		}
+		if buffer.Cursor.Row >= buffer.MinDisplayedRow+e.MaxRows {
+			buffer.MinDisplayedRow++
+		}
+	case Ctrl('b'):
+		buffer := getCurrentBuffer(e)
+		var line string
+		if len(buffer.Content) > buffer.Cursor.Row-1 && buffer.Cursor.Row-1 >= 0 {
+			line = buffer.Content[buffer.Cursor.Row-1]
+		}
+		if buffer.Cursor.Col > 0 {
+			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col - 1}
+		} else if buffer.Cursor.Col == 0 && buffer.Cursor.Row-1 >= 0 {
+			if tlen(line, TABSIZE) == 0 {
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE)}
+			} else {
+				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE) - 1}
+			}
+		}
+		if buffer.Cursor.Row < buffer.MinDisplayedRow {
+			buffer.MinDisplayedRow--
+		}
 	default:
 		if e.hasMinibufferContext() {
 			input := e.MinibufferContext.Steps[e.MinibufferContext.CurrentStep].Input
@@ -163,7 +227,7 @@ func (e *Editor) OpenBuffer(path string) error {
 		// open a fake file. It will be created at first save
 		e.OpenBuffers = append(e.OpenBuffers, &Buffer{
 			ReadOnlyMode:    false,
-			Content:         make([]string, 0),
+			Content:         []string{""},
 			Cursor:          Cursor{0, 0},
 			MinDisplayedRow: 0,
 		})

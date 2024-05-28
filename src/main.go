@@ -23,7 +23,7 @@ func main() {
 	goncurses.Raw(true)
 	//goncurses.InitColor(1, 1000, 0, 0)
 	goncurses.StartColor()
-	goncurses.InitPair(1, goncurses.C_BLUE, goncurses.C_RED)
+	goncurses.InitPair(1, goncurses.C_WHITE, goncurses.C_CYAN)
 
 	window.ScrollOk(true)
 
@@ -41,8 +41,6 @@ func main() {
 	subwindow.Refresh()
 
 	editor := CreateEditor(mainWindowRows)
-
-	editor.OpenBuffer("src/editor.go")
 
 	// first render
 	editor.Display(window, subwindow)
