@@ -185,9 +185,9 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 		if len(buffer.Content) > buffer.Cursor.Row && buffer.Cursor.Row >= 0 {
 			line = buffer.Content[buffer.Cursor.Row]
 		}
-		if buffer.Cursor.Col < tlen(line, TABSIZE)-1 {
+		if buffer.Cursor.Col < tlen(line, TABSIZE) {
 			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col + 1}
-		} else if tlen(line, TABSIZE) == 0 || buffer.Cursor.Col == tlen(line, TABSIZE)-1 {
+		} else if tlen(line, TABSIZE) == 0 || buffer.Cursor.Col == tlen(line, TABSIZE) {
 			if buffer.Cursor.Row+1 < len(buffer.Content) {
 				buffer.Cursor = Cursor{buffer.Cursor.Row + 1, 0}
 			}
@@ -204,11 +204,7 @@ func (e *Editor) handleNormalInput(key goncurses.Key) {
 		if buffer.Cursor.Col > 0 {
 			buffer.Cursor = Cursor{buffer.Cursor.Row, buffer.Cursor.Col - 1}
 		} else if buffer.Cursor.Col == 0 && buffer.Cursor.Row-1 >= 0 {
-			if tlen(line, TABSIZE) == 0 {
-				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE)}
-			} else {
-				buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE) - 1}
-			}
+			buffer.Cursor = Cursor{buffer.Cursor.Row - 1, tlen(line, TABSIZE)}
 		}
 		if buffer.Cursor.Row < buffer.MinDisplayedRow {
 			buffer.MinDisplayedRow--
