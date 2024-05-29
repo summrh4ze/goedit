@@ -1,4 +1,4 @@
-package main
+package utils
 
 import "testing"
 
@@ -24,7 +24,7 @@ func TestTlen(t *testing.T) {
 	}
 
 	for _, data := range testData {
-		l := tlen(data.str, data.tabsize)
+		l := Tlen(data.str, data.tabsize)
 		if l != data.expected {
 			t.Errorf("\"%s\": expected len %d, found %d\n", data.str, data.expected, l)
 		}
@@ -53,7 +53,7 @@ func TestTexp(t *testing.T) {
 	}
 
 	for _, data := range testData {
-		l := texp(data.str, data.tabsize)
+		l := Texp(data.str, data.tabsize)
 		if l != data.expected {
 			t.Errorf("\"%s\": expected str %s, found %s\n", data.str, data.expected, l)
 		}
