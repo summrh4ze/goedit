@@ -6,7 +6,6 @@ import (
 )
 
 type Tui struct {
-	isRunning        bool
 	bufferWindow     *goncurses.Window
 	minibufferWindow *goncurses.Window
 	baseRow          int
@@ -20,12 +19,15 @@ func RunApp(e *editor.Editor) error {
 	defer goncurses.End()
 
 	// first render
-	ui.updateEditor(e)
+	ui.displayEditor(e)
 
-	for ui.isRunning {
+	ui.bufferWindow.Timeout(20)
+OUT:
+	for {
 		buffer := e.GetCurrentBuffer()
 		key := ui.bufferWindow.GetChar()
 		switch key {
+		case 0:
 		case Ctrl('x'):
 			// wait 2 seconds for the next key otherwise drops the ctrl-x ctrl-<?> action
 			ui.bufferWindow.Timeout(2000)
@@ -33,46 +35,77 @@ func RunApp(e *editor.Editor) error {
 			if secondKey != 0 {
 				switch secondKey {
 				case Ctrl('c'):
-					ui.isRunning = false
+					break OUT
 				case Ctrl('f'):
-					if fileName, stopped := ui.getMinibufferInput("File name: "); !stopped {
-						err := e.OpenBuffer(fileName)
-						if err != nil {
-							ui.updateMinibuffer(err.Error(), len(err.Error()))
-						}
-					}
+					go e.OpenBuffer()
 				case 'k':
 					e.CloseCurrentBuffer()
 					buffer = e.GetCurrentBuffer()
 					if buffer == nil {
-						break
+						break OUT
 					}
 				}
 			}
-			ui.bufferWindow.Timeout(-1)
+			ui.bufferWindow.Timeout(20)
 		case Ctrl('f'):
-			buffer.MoveForward()
+			if e.Minibuffer.Focused {
+				e.Minibuffer.MoveForward()
+			} else {
+				buffer.MoveForward()
+			}
 		case Ctrl('b'):
-			buffer.MoveBack()
+			if e.Minibuffer.Focused {
+				e.Minibuffer.MoveBack()
+			} else {
+				buffer.MoveBack()
+			}
+		case Ctrl('g'):
+			if e.Minibuffer.Focused {
+				e.Minibuffer.RejectAction()
+			}
 		case Ctrl('n'):
 			buffer.MoveDown()
 		case Ctrl('p'):
 			buffer.MoveUp()
 		case Ctrl('a'):
-			buffer.MoveStartLine()
+			if e.Minibuffer.Focused {
+				e.Minibuffer.MoveStartLine()
+			} else {
+				buffer.MoveStartLine()
+			}
 		case Ctrl('e'):
-			buffer.MoveEndLine()
+			if e.Minibuffer.Focused {
+				e.Minibuffer.MoveEndLine()
+			} else {
+				buffer.MoveEndLine()
+			}
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
 			case 'f':
-				buffer.MoveForwardWord()
+				if e.Minibuffer.Focused {
+					e.Minibuffer.MoveForwardWord()
+				} else {
+					buffer.MoveForwardWord()
+				}
+			}
+		case goncurses.KEY_ENTER, 10:
+			if e.Minibuffer.Focused {
+				e.Minibuffer.ConfirmAction()
+			}
+		case goncurses.KEY_BACKSPACE, 127, '\b':
+			if e.Minibuffer.Focused {
+				e.Minibuffer.DeleteAtCol()
 			}
 		default:
-			buffer.Insert(goncurses.KeyString(key))
+			if e.Minibuffer.Focused {
+				e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
+			} else {
+				buffer.Insert(goncurses.KeyString(key))
+			}
 		}
 
-		ui.updateEditor(e)
+		ui.displayEditor(e)
 	}
 	return nil
 }
@@ -102,29 +135,30 @@ func initTUI() (*Tui, error) {
 	}
 	minibufferWindow.ColorOn(1)
 	minibufferWindow.SetBackground(goncurses.ColorPair(1))
-	minibufferWindow.MovePrint(0, 0, "MINIBUFFER")
 	minibufferWindow.Refresh()
 
 	return &Tui{
-		isRunning:        true,
 		bufferWindow:     bufferWindow,
 		minibufferWindow: minibufferWindow,
 	}, nil
 }
 
-func (ui *Tui) updateEditor(e *editor.Editor) {
+func (ui *Tui) displayEditor(e *editor.Editor) {
 	buffer := e.GetCurrentBuffer()
-	ui.updateBuffer(buffer)
+	if buffer != nil && !e.Minibuffer.Focused {
+		ui.displayBuffer(buffer)
+	}
+	ui.displayMinibuffer(e.Minibuffer)
 }
 
-func (ui *Tui) updateBuffer(b *editor.Buffer) {
+func (ui *Tui) displayBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Erase()
 
 	maxRows, _ := ui.bufferWindow.MaxYX()
 	if b.Cursor.Row >= ui.baseRow+maxRows {
-		ui.baseRow++
+		ui.baseRow = (b.Cursor.Row + 1) - maxRows
 	} else if b.Cursor.Row < ui.baseRow {
-		ui.baseRow--
+		ui.baseRow = b.Cursor.Row
 	}
 
 	lines := b.GetLines(ui.baseRow, ui.baseRow+maxRows)
@@ -137,70 +171,13 @@ func (ui *Tui) updateBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Move(b.Cursor.Row-ui.baseRow, b.Cursor.Col)
 }
 
-func (ui *Tui) updateMinibuffer(str string, cursorCol int) {
-	ui.minibufferWindow.Erase()
-	ui.minibufferWindow.MovePrint(0, 0, str)
-	ui.minibufferWindow.Move(0, cursorCol)
-	ui.minibufferWindow.Refresh()
-}
-
-// return: string containing the minibuffer input
-// return: bool determining if the command was stopped
-func (ui *Tui) getMinibufferInput(label string) (string, bool) {
-	ui.updateMinibuffer(label, len(label))
-
-	col := 0
-	input := ""
-	for {
-		key := ui.minibufferWindow.GetChar()
-		switch key {
-		case Ctrl('x'):
-			// wait 2 seconds for the next key otherwise drops the ctrl-x ctrl-<?> action
-			ui.minibufferWindow.Timeout(2000)
-			secondKey := ui.minibufferWindow.GetChar()
-			if secondKey != 0 {
-				switch secondKey {
-				case Ctrl('c'):
-					ui.isRunning = false
-					return "", true
-				}
-			}
-			ui.minibufferWindow.Timeout(-1)
-		case Ctrl('f'):
-			if col < len(input) {
-				col += 1
-			}
-		case Ctrl('b'):
-			if col > 0 {
-				col -= 1
-			}
-		case Ctrl('a'):
-			col = 0
-		case Ctrl('e'):
-			col = len(input)
-		case 27: // Alt-<?>
-			secondKey := ui.bufferWindow.GetChar()
-			switch secondKey {
-			case 'f':
-				// TODO
-			}
-		case goncurses.KEY_ENTER, 10:
-			ui.updateMinibuffer("DONE", 4)
-			return input, false
-		case goncurses.KEY_BACKSPACE, 127, '\b':
-			if col > 0 && col <= len(input) {
-				input = input[0:col-1] + input[col:]
-				col -= 1
-			}
-		default:
-			if col >= 0 && col <= len(input) {
-				input = input[0:col] + goncurses.KeyString(key) + input[col:]
-				col += 1
-			}
-		}
-
-		// after processing the key update minibuffer
-		ui.updateMinibuffer(label+input, len(label)+col)
+func (ui *Tui) displayMinibuffer(m *editor.Minibuffer) {
+	if m.Focused || m.Dirty {
+		line := m.GetLine()
+		ui.minibufferWindow.Erase()
+		ui.minibufferWindow.MovePrint(0, 0, line)
+		ui.minibufferWindow.Move(0, m.GetCursor())
+		ui.minibufferWindow.Refresh()
 	}
 }
 

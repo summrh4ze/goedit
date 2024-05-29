@@ -31,7 +31,7 @@ func (b *Buffer) GetLines(first, last int) []string {
 	return []string{}
 }
 
-func (b *Buffer) Insert(ch string) {
+func (b *Buffer) Insert(str string) {
 
 }
 
