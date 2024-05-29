@@ -121,11 +121,11 @@ func initTUI() (*Tui, error) {
 	goncurses.Echo(false)
 	goncurses.Raw(true)
 	goncurses.StartColor()
-	goncurses.InitColor(99, 196, 188, 184)
-	goncurses.InitColor(100, 113, 125, 129)
-	goncurses.InitColor(101, 984, 945, 780)
-	goncurses.InitPair(1, 101, 99)
-	goncurses.InitPair(2, 101, 100)
+	goncurses.InitColor(199, 196, 188, 184)
+	goncurses.InitColor(200, 113, 125, 129)
+	goncurses.InitColor(201, 984, 945, 780)
+	goncurses.InitPair(1, 201, 199)
+	goncurses.InitPair(2, 201, 200)
 
 	bufferWindow.ScrollOk(true)
 
