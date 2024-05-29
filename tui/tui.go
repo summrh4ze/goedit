@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/gbin/goncurses"
 	"org.example.goedit/editor"
+	"org.example.goedit/utils"
 )
 
 type Tui struct {
@@ -124,8 +127,11 @@ func initTUI() (*Tui, error) {
 	goncurses.InitColor(199, 196, 188, 184)
 	goncurses.InitColor(200, 113, 125, 129)
 	goncurses.InitColor(201, 984, 945, 780)
+	//goncurses.InitColor(202, 659, 600, 518)
+	goncurses.InitColor(202, 400, 361, 329)
 	goncurses.InitPair(1, 201, 199)
 	goncurses.InitPair(2, 201, 200)
+	goncurses.InitPair(3, 202, 200)
 
 	bufferWindow.ScrollOk(true)
 
@@ -180,14 +186,23 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 		b.BaseRow = b.Cursor.Row
 	}
 
+	digits := len(fmt.Sprint(len(b.Content)))
+
 	lines := b.GetLines(maxRows)
 
 	for i, line := range lines {
-		ui.bufferWindow.MovePrint(i, 0, line)
+		if b.BaseRow+i == b.Cursor.Row {
+			ui.bufferWindow.ColorOn(2)
+		} else {
+			ui.bufferWindow.ColorOn(3)
+		}
+		ui.bufferWindow.MovePrintf(i, 0, "%*d ", digits, b.BaseRow+i)
+		ui.bufferWindow.ColorOn(2)
+		ui.bufferWindow.MovePrintf(i, digits+1, "%s", utils.Texp(line, editor.TABSIZE))
 	}
 
 	// convert cursor to relative to rows boundary
-	ui.bufferWindow.Move(b.Cursor.Row-b.BaseRow, b.Cursor.Col)
+	ui.bufferWindow.Move(b.Cursor.Row-b.BaseRow, b.Cursor.Col+digits+1)
 }
 
 func (ui *Tui) displayStatusLine(b *editor.Buffer) {

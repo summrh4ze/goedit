@@ -7,7 +7,7 @@ import (
 
 const (
 	LARGE_FILE = 50 * 1024 * 1024
-	TABSIZE    = 8
+	TABSIZE    = 2
 	ALT        = 27
 )
 
