@@ -12,6 +12,7 @@ type Buffer struct {
 	Content      []string
 	Cursor       Cursor
 	ReadOnlyMode bool
+	BaseRow      int
 }
 
 func NewEmptyBuffer() *Buffer {
@@ -22,11 +23,11 @@ func NewEmptyBuffer() *Buffer {
 	}
 }
 
-func (b *Buffer) GetLines(first, last int) []string {
-	if first < len(b.Content) && last <= len(b.Content) {
-		return b.Content[first:last]
-	} else if first < len(b.Content) && last > len(b.Content) {
-		return b.Content[first:len(b.Content)]
+func (b *Buffer) GetLines(count int) []string {
+	if b.BaseRow < len(b.Content) && b.BaseRow+count <= len(b.Content) {
+		return b.Content[b.BaseRow : b.BaseRow+count]
+	} else if b.BaseRow < len(b.Content) && b.BaseRow+count > len(b.Content) {
+		return b.Content[b.BaseRow:len(b.Content)]
 	}
 	return []string{}
 }

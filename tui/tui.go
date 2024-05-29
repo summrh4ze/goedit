@@ -8,7 +8,6 @@ import (
 type Tui struct {
 	bufferWindow     *goncurses.Window
 	minibufferWindow *goncurses.Window
-	baseRow          int
 }
 
 func RunApp(e *editor.Editor) error {
@@ -155,20 +154,20 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Erase()
 
 	maxRows, _ := ui.bufferWindow.MaxYX()
-	if b.Cursor.Row >= ui.baseRow+maxRows {
-		ui.baseRow = (b.Cursor.Row + 1) - maxRows
-	} else if b.Cursor.Row < ui.baseRow {
-		ui.baseRow = b.Cursor.Row
+	if b.Cursor.Row >= b.BaseRow+maxRows {
+		b.BaseRow = (b.Cursor.Row + 1) - maxRows
+	} else if b.Cursor.Row < b.BaseRow {
+		b.BaseRow = b.Cursor.Row
 	}
 
-	lines := b.GetLines(ui.baseRow, ui.baseRow+maxRows)
+	lines := b.GetLines(maxRows)
 
 	for i, line := range lines {
 		ui.bufferWindow.MovePrint(i, 0, line)
 	}
 
 	// convert cursor to relative to rows boundary
-	ui.bufferWindow.Move(b.Cursor.Row-ui.baseRow, b.Cursor.Col)
+	ui.bufferWindow.Move(b.Cursor.Row-b.BaseRow, b.Cursor.Col)
 }
 
 func (ui *Tui) displayMinibuffer(m *editor.Minibuffer) {
