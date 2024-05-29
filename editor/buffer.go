@@ -9,6 +9,7 @@ type Cursor struct {
 }
 
 type Buffer struct {
+	Name         string
 	Content      []string
 	Cursor       Cursor
 	ReadOnlyMode bool
@@ -17,6 +18,7 @@ type Buffer struct {
 
 func NewEmptyBuffer() *Buffer {
 	return &Buffer{
+		Name:         "scratch",
 		Content:      []string{"\tGOEdit!", "To open a file use Ctrl-X Ctrl-F"},
 		ReadOnlyMode: false,
 		Cursor:       Cursor{0, 0, 0},

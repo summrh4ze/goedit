@@ -78,6 +78,7 @@ func (e *Editor) OpenBuffer() {
 	if err != nil {
 		// open a fake file. It will be created at first save
 		e.OpenBuffers = append(e.OpenBuffers, &Buffer{
+			Name:         path,
 			ReadOnlyMode: false,
 			Content:      []string{""},
 			Cursor:       Cursor{0, 0, 0},
@@ -115,6 +116,7 @@ func (e *Editor) OpenBuffer() {
 	}
 
 	e.OpenBuffers = append(e.OpenBuffers, &Buffer{
+		Name:         path,
 		ReadOnlyMode: readOnlyMode,
 		Content:      content,
 		Cursor:       Cursor{0, 0, 0},

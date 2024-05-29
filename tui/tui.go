@@ -7,7 +7,9 @@ import (
 
 type Tui struct {
 	bufferWindow     *goncurses.Window
+	statuslineWindow *goncurses.Window
 	minibufferWindow *goncurses.Window
+	oldBufferName    string
 }
 
 func RunApp(e *editor.Editor) error {
@@ -118,26 +120,43 @@ func initTUI() (*Tui, error) {
 	goncurses.CBreak(true)
 	goncurses.Echo(false)
 	goncurses.Raw(true)
-	//goncurses.InitColor(1, 1000, 0, 0)
 	goncurses.StartColor()
-	goncurses.InitPair(1, goncurses.C_WHITE, goncurses.C_CYAN)
+	goncurses.InitColor(99, 196, 188, 184)
+	goncurses.InitColor(100, 113, 125, 129)
+	goncurses.InitColor(101, 984, 945, 780)
+	goncurses.InitPair(1, 101, 99)
+	goncurses.InitPair(2, 101, 100)
 
 	bufferWindow.ScrollOk(true)
 
 	maxRows, maxCols := bufferWindow.MaxYX()
-	bufferWindowRows := maxRows - 1
-	bufferWindow.Resize(bufferWindowRows, maxCols)
+	bufferWindow.Resize(maxRows-2, maxCols)
 
-	minibufferWindow, err := goncurses.NewWindow(1, maxCols, bufferWindowRows, 0)
+	statuslineWindow, err := goncurses.NewWindow(1, maxCols, maxRows-2, 0)
 	if err != nil {
 		return nil, err
 	}
-	minibufferWindow.ColorOn(1)
-	minibufferWindow.SetBackground(goncurses.ColorPair(1))
+
+	minibufferWindow, err := goncurses.NewWindow(1, maxCols, maxRows-1, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	bufferWindow.ColorOn(2)
+	bufferWindow.SetBackground(goncurses.ColorPair(2))
+	bufferWindow.Refresh()
+
+	minibufferWindow.ColorOn(2)
+	minibufferWindow.SetBackground(goncurses.ColorPair(2))
 	minibufferWindow.Refresh()
+
+	statuslineWindow.ColorOn(1)
+	statuslineWindow.SetBackground(goncurses.ColorPair(1))
+	statuslineWindow.Refresh()
 
 	return &Tui{
 		bufferWindow:     bufferWindow,
+		statuslineWindow: statuslineWindow,
 		minibufferWindow: minibufferWindow,
 	}, nil
 }
@@ -146,6 +165,7 @@ func (ui *Tui) displayEditor(e *editor.Editor) {
 	buffer := e.GetCurrentBuffer()
 	if buffer != nil && !e.Minibuffer.Focused {
 		ui.displayBuffer(buffer)
+		ui.displayStatusLine(buffer)
 	}
 	ui.displayMinibuffer(e.Minibuffer)
 }
@@ -168,6 +188,15 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 
 	// convert cursor to relative to rows boundary
 	ui.bufferWindow.Move(b.Cursor.Row-b.BaseRow, b.Cursor.Col)
+}
+
+func (ui *Tui) displayStatusLine(b *editor.Buffer) {
+	if ui.oldBufferName != b.Name {
+		ui.oldBufferName = b.Name
+		ui.statuslineWindow.Erase()
+		ui.statuslineWindow.Print(b.Name)
+		ui.statuslineWindow.Refresh()
+	}
 }
 
 func (ui *Tui) displayMinibuffer(m *editor.Minibuffer) {
