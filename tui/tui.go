@@ -107,6 +107,8 @@ OUT:
 		case goncurses.KEY_ENTER, 10:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.ConfirmAction()
+			} else {
+				buffer.Insert("\n")
 			}
 		case goncurses.KEY_BACKSPACE, 127, '\b':
 			if e.Minibuffer.Focused {
