@@ -25,10 +25,15 @@ type Buffer struct {
 }
 
 func NewEmptyBuffer() *Buffer {
+	content := "\tGOEdit!\nTo open a file use Ctrl-X Ctrl-F"
+	buf := make([]byte, GAP_LEN, len(content)+GAP_LEN)
+	buf = append(buf, content...)
 	return &Buffer{
 		Name:         "scratch",
-		content:      []byte("\tGOEdit!\nTo open a file use Ctrl-X Ctrl-F"),
-		ReadOnlyMode: true,
+		content:      buf,
+		ReadOnlyMode: false,
+		gapStart:     0,
+		gapEnd:       GAP_LEN,
 	}
 }
 
@@ -130,7 +135,7 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
 	}
 
 	resBuf := make(
-		[]byte,
+		[]byte, 0,
 		len(b.content[startSlice:b.gapStart])+len(b.content[b.gapEnd:endSlice]),
 	)
 
@@ -170,8 +175,8 @@ func (b *Buffer) shiftGapRight(count int) {
 
 func (b *Buffer) updateLinePosMem() {
 	pos := 0
-	for i := b.gapStart - 1; i >= 0; i-- {
-		if b.content[i] == '\n' {
+	for i := b.gapStart - 1; i >= -1; i-- {
+		if i == -1 || b.content[i] == '\n' {
 			b.linePosMem = pos
 			break
 		} else {
@@ -184,6 +189,9 @@ func (b *Buffer) updateLinePosMem() {
 func (b *Buffer) MoveForward() {
 	b.shiftGapRight(1)
 	b.updateLinePosMem()
+	if b.Debug {
+		panic(b.linePosMem)
+	}
 }
 
 func (b *Buffer) MoveBack() {
@@ -201,14 +209,8 @@ func (b *Buffer) MoveUp() {
 				found = true
 			} else {
 				if b.linePosMem >= prevLineLen {
-					if b.Debug {
-						panic(fmt.Sprintf("lpm %d, prevlinelen %d", b.linePosMem, prevLineLen))
-					}
 					b.shiftGapLeft(col + 1)
 				} else {
-					if b.Debug {
-						panic(fmt.Sprintf("lpm %d, prevlinelen %d", b.linePosMem, prevLineLen))
-					}
 					b.shiftGapLeft(col + 1)
 					b.shiftGapLeft(prevLineLen - b.linePosMem)
 				}
@@ -255,8 +257,8 @@ func (b *Buffer) MoveDown() {
 
 func (b *Buffer) MoveEndLine() {
 	remaining := 0
-	for i := b.gapEnd; i < len(b.content); i++ {
-		if b.content[i] == '\n' {
+	for i := b.gapEnd; i <= len(b.content); i++ {
+		if i == len(b.content) || b.content[i] == '\n' {
 			b.shiftGapRight(remaining)
 			b.updateLinePosMem()
 			break
