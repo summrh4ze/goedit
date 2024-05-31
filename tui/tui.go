@@ -84,6 +84,10 @@ OUT:
 			} else {
 				buffer.MoveEndLine()
 			}
+		case Ctrl('k'):
+			buffer.DeleteToEnd()
+		case Ctrl('y'):
+			buffer.Yank()
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
@@ -103,6 +107,8 @@ OUT:
 				buffer.MoveEndFile()
 			case '<':
 				buffer.MoveStartFile()
+			case 127: // Alt-Backspace
+				buffer.DeleteWordBefore()
 			}
 		case goncurses.KEY_ENTER, 10:
 			if e.Minibuffer.Focused {
@@ -113,6 +119,8 @@ OUT:
 		case goncurses.KEY_BACKSPACE, 127, '\b':
 			if e.Minibuffer.Focused {
 				e.Minibuffer.DeleteAtCol()
+			} else {
+				buffer.DeleteBefore()
 			}
 		default:
 			if e.Minibuffer.Focused {

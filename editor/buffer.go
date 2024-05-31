@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	GAP_LEN       = 10
-	GAP_THRESHOLD = 2
+	GAP_LEN       = 1000
+	GAP_THRESHOLD = 10
 )
 
 type Cursor struct {
@@ -23,6 +23,7 @@ type Buffer struct {
 	gapStart     int
 	gapEnd       int
 	baseRow      int
+	killBuffer   []byte
 	ReadOnlyMode bool
 	Name         string
 }
@@ -156,6 +157,69 @@ func (b *Buffer) Insert(str string) {
 		b.content[b.gapStart+i] = ch
 	}
 	b.gapStart = b.gapStart + len(str)
+	b.updateLinePosMem()
+}
+
+func (b *Buffer) DeleteBefore() {
+	if b.gapStart > 0 {
+		b.gapStart -= 1
+		b.updateLinePosMem()
+	}
+}
+
+func (b *Buffer) DeleteWordBefore() {
+	if b.gapStart == 0 {
+		return
+	}
+	if b.content[b.gapStart-1] == '\n' {
+		b.gapStart -= 1
+		return
+	} else if utils.IsWhitespace(b.content[b.gapStart-1]) {
+		for i := b.gapStart - 1; i >= -1; i-- {
+			if i < 0 || b.content[i] == '\n' {
+				break
+			} else {
+				if utils.IsWhitespace(b.content[i]) {
+					b.gapStart -= 1
+				} else {
+					break
+				}
+			}
+		}
+	} else {
+		for i := b.gapStart - 1; i >= -1; i-- {
+			if i < 0 || b.content[i] == '\n' {
+				break
+			} else {
+				if !utils.IsWhitespace(b.content[i]) {
+					b.gapStart -= 1
+				} else {
+					break
+				}
+			}
+		}
+	}
+	b.updateLinePosMem()
+}
+
+func (b *Buffer) DeleteToEnd() {
+	b.killBuffer = b.killBuffer[0:0]
+	if b.gapEnd < len(b.content) {
+		for i := b.gapEnd; i <= len(b.content); i++ {
+			if i == len(b.content) || b.content[i] == '\n' {
+				break
+			} else {
+				b.killBuffer = append(b.killBuffer, b.content[i])
+				b.gapEnd += 1
+			}
+		}
+	}
+}
+
+func (b *Buffer) Yank() {
+	for _, ch := range b.killBuffer {
+		b.Insert(string(ch))
+	}
 }
 
 func (b *Buffer) resizeGap() {
