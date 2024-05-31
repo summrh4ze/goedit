@@ -1,12 +1,16 @@
 package editor
 
 import (
+	"bytes"
 	"fmt"
 
 	"org.example.goedit/utils"
 )
 
-const GAP_LEN = 1000
+const (
+	GAP_LEN       = 10
+	GAP_THRESHOLD = 2
+)
 
 type Cursor struct {
 	Row int
@@ -145,7 +149,22 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
 }
 
 func (b *Buffer) Insert(str string) {
+	if b.gapEnd-b.gapStart < GAP_THRESHOLD {
+		b.resizeGap()
+	}
+	for i, ch := range []byte(str) {
+		b.content[b.gapStart+i] = ch
+	}
+	b.gapStart = b.gapStart + len(str)
+}
 
+func (b *Buffer) resizeGap() {
+	newBuf := make([]byte, 0, len(b.content)+GAP_LEN)
+	newBuf = append(newBuf, b.content[:b.gapEnd]...)
+	newBuf = append(newBuf, bytes.Repeat([]byte(" "), GAP_LEN)...)
+	newBuf = append(newBuf, b.content[b.gapEnd:]...)
+	b.content = newBuf
+	b.gapEnd = b.gapEnd + GAP_LEN
 }
 
 func (b *Buffer) shiftGapLeft(count int) {
