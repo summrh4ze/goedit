@@ -84,8 +84,6 @@ OUT:
 			} else {
 				buffer.MoveEndLine()
 			}
-		case Ctrl('d'):
-			buffer.Debug = !buffer.Debug
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {

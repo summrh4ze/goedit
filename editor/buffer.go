@@ -21,7 +21,6 @@ type Buffer struct {
 	baseRow      int
 	ReadOnlyMode bool
 	Name         string
-	Debug        bool
 }
 
 func NewEmptyBuffer() *Buffer {
@@ -189,9 +188,6 @@ func (b *Buffer) updateLinePosMem() {
 func (b *Buffer) MoveForward() {
 	b.shiftGapRight(1)
 	b.updateLinePosMem()
-	if b.Debug {
-		panic(b.linePosMem)
-	}
 }
 
 func (b *Buffer) MoveBack() {
