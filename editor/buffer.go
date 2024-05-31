@@ -368,3 +368,13 @@ func (b *Buffer) MoveBackWord() {
 		}
 	}
 }
+
+func (b *Buffer) MoveStartFile() {
+	b.shiftGapLeft(b.gapStart)
+	b.linePosMem = 0
+}
+
+func (b *Buffer) MoveEndFile() {
+	b.shiftGapRight(len(b.content) - b.gapEnd)
+	b.updateLinePosMem()
+}
