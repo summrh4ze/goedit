@@ -270,7 +270,7 @@ func (b *Buffer) MoveStartLine() {
 	for i := b.gapStart - 1; i >= 0; i-- {
 		if b.content[i] == '\n' {
 			break
-		} else if !isWhitespace(b.content[i]) {
+		} else if !utils.IsWhitespace(b.content[i]) {
 			untilNewline += 1
 			untilFirstLeft = untilNewline
 		} else {
@@ -280,7 +280,7 @@ func (b *Buffer) MoveStartLine() {
 
 	untilFirstRight := 0
 	for i := b.gapEnd; i < len(b.content); i++ {
-		if !isWhitespace(b.content[i]) || b.content[i] == '\n' {
+		if !utils.IsWhitespace(b.content[i]) || b.content[i] == '\n' {
 			break
 		} else {
 			untilFirstRight += 1
@@ -299,44 +299,70 @@ func (b *Buffer) MoveStartLine() {
 	}
 }
 
-func isWhitespace(b byte) bool {
-	return b == ' ' || b == '\t'
-}
-
 func (b *Buffer) MoveForwardWord() {
-	if !isWhitespace(b.content[b.gapEnd]) {
-		found := false
-		for i := b.gapEnd + 1; i < len(b.content); i++ {
-			if b.content[i] == '\n' {
-				if !found {
-					found = true
-				} else {
-					b.shiftGapRight(i - b.gapEnd)
-					b.linePosMem = 0
-					break
-				}
+	if b.gapEnd == len(b.content) {
+		return
+	}
+	if !utils.IsWhitespace(b.content[b.gapEnd]) {
+		for i := b.gapEnd + 1; i <= len(b.content); i++ {
+			if i == len(b.content) || b.content[i] == '\n' {
+				b.shiftGapRight(i - b.gapEnd)
+				b.updateLinePosMem()
+				return
 			} else {
 				if utils.IsDelimiter(b.content[i]) {
 					b.shiftGapRight(i - b.gapEnd)
 					b.updateLinePosMem()
+					return
 				}
 			}
 		}
 	} else {
-		found := false
-		for i := b.gapEnd + 1; i < len(b.content); i++ {
-			if b.content[i] == '\n' {
-				if !found {
-					found = true
-				} else {
-					b.shiftGapRight(i - b.gapEnd)
-					b.linePosMem = 0
-					break
-				}
+		for i := b.gapEnd + 1; i <= len(b.content); i++ {
+			if i == len(b.content) || b.content[i] == '\n' {
+				b.shiftGapRight(i - b.gapEnd)
+				b.updateLinePosMem()
+				return
 			} else {
-				if !isWhitespace(b.content[i]) {
+				if !utils.IsWhitespace(b.content[i]) {
 					b.shiftGapRight(i - b.gapEnd)
 					b.updateLinePosMem()
+					return
+				}
+			}
+		}
+	}
+}
+
+func (b *Buffer) MoveBackWord() {
+	if b.gapStart == 0 {
+		return
+	}
+	if !utils.IsWhitespace(b.content[b.gapStart-1]) {
+		for i := b.gapStart - 2; i >= -1; i-- {
+			if i < 0 || b.content[i] == '\n' {
+				b.shiftGapLeft(b.gapStart - i - 1)
+				b.updateLinePosMem()
+				return
+			} else {
+				if utils.IsDelimiter(b.content[i]) {
+					b.shiftGapLeft(b.gapStart - i - 1)
+					b.updateLinePosMem()
+					return
+				}
+			}
+		}
+	} else {
+		for i := b.gapStart - 2; i >= -1; i-- {
+			if i < 0 || b.content[i] == '\n' {
+				b.shiftGapLeft(b.gapStart - i - 1)
+				b.updateLinePosMem()
+				return
+			} else {
+				if !utils.IsWhitespace(b.content[i]) {
+					b.shiftGapLeft(b.gapStart - i - 1)
+					b.updateLinePosMem()
+					return
 				}
 			}
 		}

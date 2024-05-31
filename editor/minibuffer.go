@@ -83,30 +83,55 @@ func (m *Minibuffer) MoveStartLine() {
 
 func (m *Minibuffer) MoveForwardWord() {
 	if m.col < len(m.input) {
-		col := m.col
 		if m.input[m.col] != ' ' {
-			for i := m.col + 1; i < len(m.input); i++ {
-				if utils.IsDelimiter(m.input[i]) {
-					col = i
+			for i := m.col + 1; i <= len(m.input); i++ {
+				if i == len(m.input) {
+					m.col = len(m.input)
 					break
 				}
-			}
-			if col > m.col {
-				m.col = col
-			} else {
-				// word goes until the end of the line so stop at the very end
-				m.col = len(m.input)
+				if utils.IsDelimiter(m.input[i]) {
+					m.col = i
+					break
+				}
 			}
 		} else {
-			// search for the first non whitespace character
-			for i := m.col + 1; i < len(m.input); i++ {
-				if !utils.IsDelimiter(m.input[i]) {
-					col = i
+			for i := m.col + 1; i <= len(m.input); i++ {
+				if i == len(m.input) {
+					m.col = len(m.input)
+					break
+				}
+				if !utils.IsWhitespace(m.input[i]) {
+					m.col = i
 					break
 				}
 			}
-			if col > m.col {
-				m.col = col
+		}
+	}
+}
+
+func (m *Minibuffer) MoveBackWord() {
+	if m.col > 0 {
+		if m.input[m.col-1] != ' ' {
+			for i := m.col - 1; i >= -1; i-- {
+				if i < 0 {
+					m.col = 0
+					break
+				}
+				if utils.IsDelimiter(m.input[i]) {
+					m.col = i + 1
+					break
+				}
+			}
+		} else {
+			for i := m.col - 1; i >= -1; i-- {
+				if i < 0 {
+					m.col = 0
+					break
+				}
+				if !utils.IsWhitespace(m.input[i]) {
+					m.col = i + 1
+					break
+				}
 			}
 		}
 	}

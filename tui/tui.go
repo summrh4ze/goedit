@@ -93,6 +93,12 @@ OUT:
 				} else {
 					buffer.MoveForwardWord()
 				}
+			case 'b':
+				if e.Minibuffer.Focused {
+					e.Minibuffer.MoveBackWord()
+				} else {
+					buffer.MoveBackWord()
+				}
 			}
 		case goncurses.KEY_ENTER, 10:
 			if e.Minibuffer.Focused {
