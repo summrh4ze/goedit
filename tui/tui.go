@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/gbin/goncurses"
 	"org.example.goedit/editor"
@@ -83,6 +84,8 @@ OUT:
 			} else {
 				buffer.MoveEndLine()
 			}
+		case Ctrl('d'):
+			buffer.Debug = !buffer.Debug
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
@@ -180,29 +183,25 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Erase()
 
 	maxRows, _ := ui.bufferWindow.MaxYX()
-	if b.Cursor.Row >= b.BaseRow+maxRows {
-		b.BaseRow = (b.Cursor.Row + 1) - maxRows
-	} else if b.Cursor.Row < b.BaseRow {
-		b.BaseRow = b.Cursor.Row
-	}
 
-	digits := len(fmt.Sprint(len(b.Content)))
+	data, totalRows, cursor := b.GetContent(maxRows, editor.TABSIZE)
+	lines := strings.Split(data, "\n")
 
-	lines := b.GetLines(maxRows)
+	digits := len(fmt.Sprint(totalRows))
 
 	for i, line := range lines {
-		if b.BaseRow+i == b.Cursor.Row {
+		if b.GetBaseRow()+i == cursor.Row {
 			ui.bufferWindow.ColorOn(2)
 		} else {
 			ui.bufferWindow.ColorOn(3)
 		}
-		ui.bufferWindow.MovePrintf(i, 0, "%*d ", digits, b.BaseRow+i)
+		ui.bufferWindow.MovePrintf(i, 0, "%*d ", digits, b.GetBaseRow()+i)
 		ui.bufferWindow.ColorOn(2)
 		ui.bufferWindow.MovePrintf(i, digits+1, "%s", utils.Texp(line, editor.TABSIZE))
 	}
 
 	// convert cursor to relative to rows boundary
-	ui.bufferWindow.Move(b.Cursor.Row-b.BaseRow, b.Cursor.Col+digits+1)
+	ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), cursor.Col+digits+1)
 }
 
 func (ui *Tui) displayStatusLine(b *editor.Buffer) {

@@ -1,183 +1,346 @@
 package editor
 
-import "org.example.goedit/utils"
+import (
+	"fmt"
+
+	"org.example.goedit/utils"
+)
+
+const GAP_LEN = 1000
 
 type Cursor struct {
 	Row int
 	Col int
-	Mem int
 }
 
 type Buffer struct {
-	Name         string
-	Content      []string
-	Cursor       Cursor
+	content      []byte
+	linePosMem   int
+	gapStart     int
+	gapEnd       int
+	baseRow      int
 	ReadOnlyMode bool
-	BaseRow      int
+	Name         string
+	Debug        bool
 }
 
 func NewEmptyBuffer() *Buffer {
 	return &Buffer{
 		Name:         "scratch",
-		Content:      []string{"\tGOEdit!", "To open a file use Ctrl-X Ctrl-F"},
-		ReadOnlyMode: false,
-		Cursor:       Cursor{0, 0, 0},
+		content:      []byte("\tGOEdit!\nTo open a file use Ctrl-X Ctrl-F"),
+		ReadOnlyMode: true,
 	}
 }
 
-func (b *Buffer) GetLines(count int) []string {
-	if b.BaseRow < len(b.Content) && b.BaseRow+count <= len(b.Content) {
-		return b.Content[b.BaseRow : b.BaseRow+count]
-	} else if b.BaseRow < len(b.Content) && b.BaseRow+count > len(b.Content) {
-		return b.Content[b.BaseRow:len(b.Content)]
+func NewBuffer(name string, content []byte, readOnly bool) *Buffer {
+	if readOnly {
+		return &Buffer{
+			Name:         name,
+			content:      content,
+			ReadOnlyMode: true,
+		}
+	} else {
+		buf := make([]byte, GAP_LEN, len(content)+GAP_LEN)
+		buf = append(buf, content...)
+		return &Buffer{
+			Name:         name,
+			content:      buf,
+			ReadOnlyMode: false,
+			gapStart:     0,
+			gapEnd:       GAP_LEN,
+		}
 	}
-	return []string{}
+}
+
+func (b *Buffer) GetBaseRow() int {
+	return b.baseRow
+}
+
+func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
+	row := 0
+	col := 0
+	cursor := Cursor{}
+	newLinesPos := make([]int, 0)
+
+	nonTabs := 0
+	var prevByte byte
+	for i, currentByte := range b.content {
+		if i > b.gapStart && i < b.gapEnd {
+			continue
+		} else if i == b.gapStart {
+			cursor.Row = row
+			cursor.Col = col
+			continue
+		}
+		if currentByte == '\t' {
+			if col == 0 {
+				prevByte = currentByte
+				col += tabsize
+			} else if prevByte == '\t' {
+				col += tabsize
+				prevByte = currentByte
+			} else {
+				col += tabsize - nonTabs%tabsize
+				nonTabs = 0
+			}
+		} else if currentByte == '\n' {
+			row++
+			col = 0
+			nonTabs = 0
+			newLinesPos = append(newLinesPos, i)
+		} else {
+			col++
+			nonTabs++
+		}
+	}
+
+	if b.gapStart == len(b.content) {
+		cursor.Row = row
+		cursor.Col = col
+	}
+
+	if cursor.Row >= b.baseRow+count {
+		b.baseRow = cursor.Row + 1 - count
+	} else if cursor.Row < b.baseRow {
+		b.baseRow = cursor.Row
+	}
+
+	startSlice := 0
+	endSlice := len(b.content)
+	totalRows := len(newLinesPos) + 1
+
+	if b.baseRow == 0 {
+		if b.baseRow+count < totalRows {
+			endSlice = newLinesPos[b.baseRow+count-1] + 1
+		}
+	} else {
+		startSlice = newLinesPos[b.baseRow-1] + 1
+		if b.baseRow+count < totalRows {
+			endSlice = newLinesPos[b.baseRow+count-1] + 1
+		}
+	}
+
+	// if cursor(gap) is not in range [startSlice:endSlice] something is wrong
+	if b.gapStart < startSlice || b.gapEnd > endSlice {
+		panic(fmt.Sprintf(
+			"Error startSlice %d, gapStart %d, gapEnd %d, endSlice %d\n",
+			startSlice, b.gapStart,
+			b.gapEnd, endSlice,
+		))
+	}
+
+	resBuf := make(
+		[]byte,
+		len(b.content[startSlice:b.gapStart])+len(b.content[b.gapEnd:endSlice]),
+	)
+
+	resBuf = append(resBuf, b.content[startSlice:b.gapStart]...)
+	resBuf = append(resBuf, b.content[b.gapEnd:endSlice]...)
+
+	return string(resBuf), totalRows, cursor
 }
 
 func (b *Buffer) Insert(str string) {
 
 }
 
-func (b *Buffer) MoveForward() {
-	var line string
-	if len(b.Content) > b.Cursor.Row && b.Cursor.Row >= 0 {
-		line = b.Content[b.Cursor.Row]
-	}
-	if b.Cursor.Col < utils.Tlen(line, TABSIZE) {
-		b.Cursor = Cursor{b.Cursor.Row, b.Cursor.Col + 1, b.Cursor.Col + 1}
-	} else if utils.Tlen(line, TABSIZE) == 0 || b.Cursor.Col == utils.Tlen(line, TABSIZE) {
-		if b.Cursor.Row+1 < len(b.Content) {
-			b.Cursor = Cursor{b.Cursor.Row + 1, 0, 0}
+func (b *Buffer) shiftGapLeft(count int) {
+	for i := 0; i < count; i++ {
+		if b.gapStart > 0 {
+			b.content[b.gapEnd-1] = b.content[b.gapStart-1]
+			b.gapStart -= 1
+			b.gapEnd -= 1
+		} else {
+			break
 		}
 	}
 }
 
-func (b *Buffer) MoveBack() {
-	var line string
-	if len(b.Content) > b.Cursor.Row-1 && b.Cursor.Row-1 >= 0 {
-		line = b.Content[b.Cursor.Row-1]
-	}
-	if b.Cursor.Col > 0 {
-		b.Cursor = Cursor{b.Cursor.Row, b.Cursor.Col - 1, b.Cursor.Col - 1}
-	} else if b.Cursor.Col == 0 && b.Cursor.Row-1 >= 0 {
-		b.Cursor = Cursor{b.Cursor.Row - 1, utils.Tlen(line, TABSIZE), utils.Tlen(line, TABSIZE)}
+func (b *Buffer) shiftGapRight(count int) {
+	for i := 0; i < count; i++ {
+		if b.gapEnd < len(b.content) {
+			b.content[b.gapStart] = b.content[b.gapEnd]
+			b.gapStart += 1
+			b.gapEnd += 1
+		} else {
+			break
+		}
 	}
 }
 
-func (b *Buffer) MoveUp() {
-	if b.Cursor.Row > 0 {
-		prevLine := b.Content[b.Cursor.Row-1]
-		if b.Cursor.Col > utils.Tlen(prevLine, TABSIZE) || b.Cursor.Mem > utils.Tlen(prevLine, TABSIZE) {
-			b.Cursor = Cursor{b.Cursor.Row - 1, utils.Tlen(prevLine, TABSIZE), b.Cursor.Mem}
-		} else if b.Cursor.Mem < b.Cursor.Col {
-			b.Cursor = Cursor{b.Cursor.Row - 1, b.Cursor.Col, b.Cursor.Mem}
+func (b *Buffer) updateLinePosMem() {
+	pos := 0
+	for i := b.gapStart - 1; i >= 0; i-- {
+		if b.content[i] == '\n' {
+			b.linePosMem = pos
+			break
 		} else {
-			b.Cursor = Cursor{b.Cursor.Row - 1, b.Cursor.Mem, b.Cursor.Mem}
+			pos += 1
+		}
+	}
+}
+
+// cursor will always have the same pos as gapStart
+func (b *Buffer) MoveForward() {
+	b.shiftGapRight(1)
+	b.updateLinePosMem()
+}
+
+func (b *Buffer) MoveBack() {
+	b.shiftGapLeft(1)
+	b.updateLinePosMem()
+}
+
+func (b *Buffer) MoveUp() {
+	found := false
+	col := 0
+	prevLineLen := 0
+	for i := b.gapStart - 1; i >= -1; i-- {
+		if i == -1 || b.content[i] == '\n' {
+			if !found {
+				found = true
+			} else {
+				if b.linePosMem >= prevLineLen {
+					if b.Debug {
+						panic(fmt.Sprintf("lpm %d, prevlinelen %d", b.linePosMem, prevLineLen))
+					}
+					b.shiftGapLeft(col + 1)
+				} else {
+					if b.Debug {
+						panic(fmt.Sprintf("lpm %d, prevlinelen %d", b.linePosMem, prevLineLen))
+					}
+					b.shiftGapLeft(col + 1)
+					b.shiftGapLeft(prevLineLen - b.linePosMem)
+				}
+				break
+			}
+		} else {
+			if found {
+				prevLineLen += 1
+			} else {
+				col += 1
+			}
 		}
 	}
 }
 
 func (b *Buffer) MoveDown() {
-	if b.Cursor.Row < len(b.Content)-1 {
-		nextLine := b.Content[b.Cursor.Row+1]
-		if b.Cursor.Col > utils.Tlen(nextLine, TABSIZE) || b.Cursor.Mem > utils.Tlen(nextLine, TABSIZE) {
-			b.Cursor = Cursor{b.Cursor.Row + 1, utils.Tlen(nextLine, TABSIZE), b.Cursor.Mem}
-		} else if b.Cursor.Mem < b.Cursor.Col {
-			b.Cursor = Cursor{b.Cursor.Row + 1, b.Cursor.Col, b.Cursor.Mem}
+	found := false
+	remaining := 0
+	nextLineLen := 0
+
+	for i := b.gapEnd; i <= len(b.content); i++ {
+		if i == len(b.content) || b.content[i] == '\n' {
+			if !found {
+				found = true
+			} else {
+				if b.linePosMem >= nextLineLen {
+					b.shiftGapRight(remaining)
+					b.shiftGapRight(nextLineLen + 1)
+				} else {
+					b.shiftGapRight(remaining)
+					b.shiftGapRight(b.linePosMem + 1)
+				}
+				break
+			}
 		} else {
-			b.Cursor = Cursor{b.Cursor.Row + 1, b.Cursor.Mem, b.Cursor.Mem}
+			if found {
+				nextLineLen += 1
+			} else {
+				remaining += 1
+			}
 		}
 	}
 }
 
 func (b *Buffer) MoveEndLine() {
-	var line string
-	if len(b.Content) > b.Cursor.Row && b.Cursor.Row >= 0 {
-		line = b.Content[b.Cursor.Row]
+	remaining := 0
+	for i := b.gapEnd; i < len(b.content); i++ {
+		if b.content[i] == '\n' {
+			b.shiftGapRight(remaining)
+			b.updateLinePosMem()
+			break
+		} else {
+			remaining += 1
+		}
 	}
-	b.Cursor = Cursor{b.Cursor.Row, utils.Tlen(line, TABSIZE), utils.Tlen(line, TABSIZE)}
 }
 
 func (b *Buffer) MoveStartLine() {
-	var line string
-	if len(b.Content) > b.Cursor.Row && b.Cursor.Row >= 0 {
-		line = b.Content[b.Cursor.Row]
-	}
-	expLine := utils.Texp(line, TABSIZE)
-	firstNonWh := 0
-	for i := 0; i < len(expLine); i++ {
-		if expLine[i] != ' ' {
-			firstNonWh = i
+	untilNewline := 0
+	untilFirstLeft := 0
+	for i := b.gapStart - 1; i >= 0; i-- {
+		if b.content[i] == '\n' {
 			break
+		} else if !isWhitespace(b.content[i]) {
+			untilNewline += 1
+			untilFirstLeft = untilNewline
+		} else {
+			untilNewline += 1
 		}
 	}
-	if b.Cursor.Col == 0 || b.Cursor.Col > firstNonWh {
-		b.Cursor = Cursor{b.Cursor.Row, firstNonWh, firstNonWh}
-	} else {
-		b.Cursor = Cursor{b.Cursor.Row, 0, 0}
+
+	untilFirstRight := 0
+	for i := b.gapEnd; i < len(b.content); i++ {
+		if !isWhitespace(b.content[i]) || b.content[i] == '\n' {
+			break
+		} else {
+			untilFirstRight += 1
+		}
+	}
+
+	if untilNewline > 0 && untilFirstLeft == 0 && untilFirstRight == 0 {
+		b.shiftGapLeft(untilNewline)
+		b.linePosMem = 0
+	} else if untilFirstLeft > 0 {
+		b.shiftGapLeft(untilFirstLeft)
+		b.updateLinePosMem()
+	} else if untilFirstLeft == 0 && untilFirstRight > 0 {
+		b.shiftGapRight(untilFirstRight)
+		b.updateLinePosMem()
 	}
 }
 
-func (b *Buffer) MoveForwardWord() {
-	var line string
-	if len(b.Content) > b.Cursor.Row && b.Cursor.Row >= 0 {
-		line = b.Content[b.Cursor.Row]
-	}
+func isWhitespace(b byte) bool {
+	return b == ' ' || b == '\t'
+}
 
-	// need to expand the string before checking characters
-	if b.Cursor.Col < utils.Tlen(line, TABSIZE) {
-		expLine := utils.Texp(line, TABSIZE)
-		row := b.Cursor.Row
-		col := b.Cursor.Col
-		if expLine[b.Cursor.Col] != ' ' {
-			for i := b.Cursor.Col + 1; i < len(expLine); i++ {
-				if utils.IsDelimiter(expLine[i]) {
-					col = i
+func (b *Buffer) MoveForwardWord() {
+	if !isWhitespace(b.content[b.gapEnd]) {
+		found := false
+		for i := b.gapEnd + 1; i < len(b.content); i++ {
+			if b.content[i] == '\n' {
+				if !found {
+					found = true
+				} else {
+					b.shiftGapRight(i - b.gapEnd)
+					b.linePosMem = 0
 					break
 				}
-			}
-			if col > b.Cursor.Col {
-				b.Cursor = Cursor{b.Cursor.Row, col, col}
 			} else {
-				// word goes until the end of the line so stop at the very end
-				b.Cursor = Cursor{b.Cursor.Row, utils.Tlen(line, TABSIZE), utils.Tlen(line, TABSIZE)}
-			}
-		} else {
-			// search for the first non whitespace character
-			for i := b.Cursor.Col + 1; i < len(expLine); i++ {
-				if !utils.IsDelimiter(expLine[i]) {
-					col = i
-					break
+				if utils.IsDelimiter(b.content[i]) {
+					b.shiftGapRight(i - b.gapEnd)
+					b.updateLinePosMem()
 				}
-			}
-			if col > b.Cursor.Col {
-				b.Cursor = Cursor{b.Cursor.Row, col, col}
-			} else if b.Cursor.Row+1 < len(b.Content) {
-				// not found on current line search the next line
-				row += 1
-				col = 0
-				nextLine := b.Content[b.Cursor.Row+1]
-				nexpLine := utils.Texp(nextLine, TABSIZE)
-				for i := 0; i < len(nexpLine); i++ {
-					if !utils.IsDelimiter(nexpLine[i]) {
-						col = i
-						break
-					}
-				}
-				b.Cursor = Cursor{row, col, col}
 			}
 		}
-	} else if utils.Tlen(line, TABSIZE) == 0 || b.Cursor.Col == utils.Tlen(line, TABSIZE) {
-		if b.Cursor.Row+1 < len(b.Content) {
-			nexpLine := utils.Texp(b.Content[b.Cursor.Row+1], TABSIZE)
-			col := 0
-			for i := 0; i < len(nexpLine); i++ {
-				if !utils.IsDelimiter(nexpLine[i]) {
-					col = i
+	} else {
+		found := false
+		for i := b.gapEnd + 1; i < len(b.content); i++ {
+			if b.content[i] == '\n' {
+				if !found {
+					found = true
+				} else {
+					b.shiftGapRight(i - b.gapEnd)
+					b.linePosMem = 0
 					break
 				}
+			} else {
+				if !isWhitespace(b.content[i]) {
+					b.shiftGapRight(i - b.gapEnd)
+					b.updateLinePosMem()
+				}
 			}
-			b.Cursor = Cursor{b.Cursor.Row + 1, col, col}
 		}
 	}
 }

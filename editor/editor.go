@@ -1,7 +1,6 @@
 package editor
 
 import (
-	"bufio"
 	"os"
 )
 
@@ -77,12 +76,7 @@ func (e *Editor) OpenBuffer() {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		// open a fake file. It will be created at first save
-		e.OpenBuffers = append(e.OpenBuffers, &Buffer{
-			Name:         path,
-			ReadOnlyMode: false,
-			Content:      []string{""},
-			Cursor:       Cursor{0, 0, 0},
-		})
+		e.OpenBuffers = append(e.OpenBuffers, NewBuffer(path, []byte(""), false))
 		e.CurrentBuffer = len(e.OpenBuffers) - 1
 		e.Minibuffer.SetMessage("Done")
 		return
@@ -94,33 +88,13 @@ func (e *Editor) OpenBuffer() {
 		readOnlyMode = true
 	}
 
-	file, err := os.Open(path)
+	content, err := os.ReadFile(path)
 	if err != nil {
-		e.Minibuffer.SetMessage("Error opening file")
-		return
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	content := make([]string, 0)
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		content = append(content, line)
-	}
-
-	readErr := scanner.Err()
-	if readErr != nil {
 		e.Minibuffer.SetMessage("Error reading file")
 		return
 	}
 
-	e.OpenBuffers = append(e.OpenBuffers, &Buffer{
-		Name:         path,
-		ReadOnlyMode: readOnlyMode,
-		Content:      content,
-		Cursor:       Cursor{0, 0, 0},
-	})
+	e.OpenBuffers = append(e.OpenBuffers, NewBuffer(path, content, readOnlyMode))
 	e.CurrentBuffer = len(e.OpenBuffers) - 1
 	e.Minibuffer.SetMessage("Done")
 }
