@@ -20,11 +20,11 @@ type Editor struct {
 func CreateEditor() *Editor {
 	ready := make(chan bool, 1)
 	editor := &Editor{
-		OpenBuffers:     []*Buffer{NewEmptyBuffer()},
 		CurrentBuffer:   0,
 		Minibuffer:      NewMinibuffer(ready),
 		MinibufferReady: ready,
 	}
+	editor.OpenBuffers = []*Buffer{NewEmptyBuffer(editor)}
 	return editor
 }
 
@@ -76,7 +76,7 @@ func (e *Editor) OpenBuffer() {
 	fileInfo, err := os.Stat(path)
 	if err != nil {
 		// open a fake file. It will be created at first save
-		e.OpenBuffers = append(e.OpenBuffers, NewBuffer(path, []byte(""), false))
+		e.OpenBuffers = append(e.OpenBuffers, NewBuffer(e, path, []byte(""), false))
 		e.CurrentBuffer = len(e.OpenBuffers) - 1
 		e.Minibuffer.SetMessage("Done")
 		return
@@ -94,7 +94,7 @@ func (e *Editor) OpenBuffer() {
 		return
 	}
 
-	e.OpenBuffers = append(e.OpenBuffers, NewBuffer(path, content, readOnlyMode))
+	e.OpenBuffers = append(e.OpenBuffers, NewBuffer(e, path, content, readOnlyMode))
 	e.CurrentBuffer = len(e.OpenBuffers) - 1
 	e.Minibuffer.SetMessage("Done")
 }

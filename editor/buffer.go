@@ -17,22 +17,32 @@ type Cursor struct {
 	Col int
 }
 
+type Mark struct {
+	Active bool
+	Cursor Cursor
+}
+
 type Buffer struct {
+	parent       *Editor
 	content      []byte
 	linePosMem   int
 	gapStart     int
 	gapEnd       int
 	baseRow      int
+	markActive   bool
+	markPos      int
+	markPosEnd   int
 	killBuffer   []byte
 	ReadOnlyMode bool
 	Name         string
 }
 
-func NewEmptyBuffer() *Buffer {
+func NewEmptyBuffer(parent *Editor) *Buffer {
 	content := "\tGOEdit!\nTo open a file use Ctrl-X Ctrl-F"
 	buf := make([]byte, GAP_LEN, len(content)+GAP_LEN)
 	buf = append(buf, content...)
 	return &Buffer{
+		parent:       parent,
 		Name:         "scratch",
 		content:      buf,
 		ReadOnlyMode: false,
@@ -41,9 +51,10 @@ func NewEmptyBuffer() *Buffer {
 	}
 }
 
-func NewBuffer(name string, content []byte, readOnly bool) *Buffer {
+func NewBuffer(parent *Editor, name string, content []byte, readOnly bool) *Buffer {
 	if readOnly {
 		return &Buffer{
+			parent:       parent,
 			Name:         name,
 			content:      content,
 			ReadOnlyMode: true,
@@ -52,6 +63,7 @@ func NewBuffer(name string, content []byte, readOnly bool) *Buffer {
 		buf := make([]byte, GAP_LEN, len(content)+GAP_LEN)
 		buf = append(buf, content...)
 		return &Buffer{
+			parent:       parent,
 			Name:         name,
 			content:      buf,
 			ReadOnlyMode: false,
@@ -65,11 +77,19 @@ func (b *Buffer) GetBaseRow() int {
 	return b.baseRow
 }
 
-func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
+func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor, Mark) {
 	row := 0
 	col := 0
 	cursor := Cursor{}
+	mark := Mark{}
 	newLinesPos := make([]int, 0)
+
+	markPos := 0
+	if b.gapStart > b.markPos {
+		markPos = b.markPos
+	} else {
+		markPos = b.markPosEnd
+	}
 
 	nonTabs := 0
 	var prevByte byte
@@ -79,7 +99,15 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
 		} else if i == b.gapStart {
 			cursor.Row = row
 			cursor.Col = col
+			if i == markPos {
+				mark.Cursor.Row = row
+				mark.Cursor.Col = col
+			}
 			continue
+		}
+		if i == markPos {
+			mark.Cursor.Row = row
+			mark.Cursor.Col = col
 		}
 		if currentByte == '\t' {
 			if col == 0 {
@@ -106,6 +134,11 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
 	if b.gapStart == len(b.content) {
 		cursor.Row = row
 		cursor.Col = col
+	}
+
+	if markPos == len(b.content) {
+		mark.Cursor.Row = row
+		mark.Cursor.Col = col
 	}
 
 	if cursor.Row >= b.baseRow+count {
@@ -146,7 +179,11 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor) {
 	resBuf = append(resBuf, b.content[startSlice:b.gapStart]...)
 	resBuf = append(resBuf, b.content[b.gapEnd:endSlice]...)
 
-	return string(resBuf), totalRows, cursor
+	if b.markActive {
+		mark.Active = true
+	}
+
+	return string(resBuf), totalRows, cursor, mark
 }
 
 func (b *Buffer) Insert(str string) {
@@ -219,6 +256,21 @@ func (b *Buffer) DeleteToEnd() {
 func (b *Buffer) Yank() {
 	for _, ch := range b.killBuffer {
 		b.Insert(string(ch))
+	}
+}
+
+func (b *Buffer) IsMarkActive() bool {
+	return b.markActive
+}
+
+func (b *Buffer) ToggleMark() {
+	b.markActive = !b.markActive
+	b.markPos = b.gapStart
+	b.markPosEnd = b.gapEnd
+	if b.markActive {
+		b.parent.Minibuffer.SetMessage("Mark set")
+	} else {
+		b.parent.Minibuffer.SetMessage("Quit")
 	}
 }
 

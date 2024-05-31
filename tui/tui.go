@@ -67,6 +67,10 @@ OUT:
 		case Ctrl('g'):
 			if e.Minibuffer.Focused {
 				e.Minibuffer.RejectAction()
+			} else {
+				if buffer.IsMarkActive() {
+					buffer.ToggleMark()
+				}
 			}
 		case Ctrl('n'):
 			buffer.MoveDown()
@@ -109,6 +113,8 @@ OUT:
 				buffer.MoveStartFile()
 			case 127: // Alt-Backspace
 				buffer.DeleteWordBefore()
+			case ' ':
+				buffer.ToggleMark()
 			}
 		case goncurses.KEY_ENTER, 10:
 			if e.Minibuffer.Focused {
@@ -204,7 +210,7 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 
 	maxRows, _ := ui.bufferWindow.MaxYX()
 
-	data, totalRows, cursor := b.GetContent(maxRows, editor.TABSIZE)
+	data, totalRows, cursor, mark := b.GetContent(maxRows, editor.TABSIZE)
 	lines := strings.Split(data, "\n")
 
 	digits := len(fmt.Sprint(totalRows))
@@ -217,7 +223,36 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 		}
 		ui.bufferWindow.MovePrintf(i, 0, "%*d ", digits, b.GetBaseRow()+i)
 		ui.bufferWindow.ColorOn(2)
-		ui.bufferWindow.MovePrintf(i, digits+1, "%s", utils.Texp(line, editor.TABSIZE))
+
+		for j, ch := range utils.Texp(line, editor.TABSIZE) {
+			if mark.Active {
+				//panic(fmt.Sprintf("%v\n", mark))
+				if mark.Cursor.Row < cursor.Row {
+					if b.GetBaseRow()+i > mark.Cursor.Row && b.GetBaseRow()+i < cursor.Row {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == mark.Cursor.Row && j >= mark.Cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == cursor.Row && j <= cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					}
+				} else if mark.Cursor.Row > cursor.Row {
+					if b.GetBaseRow()+i > cursor.Row && b.GetBaseRow()+i < mark.Cursor.Row {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == mark.Cursor.Row && j <= mark.Cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == cursor.Row && j >= cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					}
+				} else if b.GetBaseRow()+i == mark.Cursor.Row {
+					if (mark.Cursor.Col <= j && cursor.Col > j) || (cursor.Col <= j && mark.Cursor.Col >= j) {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					}
+				}
+			}
+			ui.bufferWindow.MovePrint(i, digits+1+j, string(ch))
+			ui.bufferWindow.AttrOff(goncurses.A_REVERSE)
+		}
+
 	}
 
 	// convert cursor to relative to rows boundary
