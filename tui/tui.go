@@ -122,6 +122,8 @@ OUT:
 			} else {
 				buffer.DeleteBefore()
 			}
+		case goncurses.KEY_TAB:
+			buffer.Insert("\t")
 		default:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
