@@ -226,6 +226,17 @@ func (b *Buffer) DeleteBefore() {
 	}
 }
 
+func (b *Buffer) DeleteAfter() {
+	if b.markActive {
+		b.deleteToMark()
+		return
+	}
+	if b.gapEnd < len(b.content) {
+		b.gapEnd += 1
+		b.updateLinePosMem()
+	}
+}
+
 func (b *Buffer) DeleteWordBefore() {
 	if b.gapStart == 0 {
 		return

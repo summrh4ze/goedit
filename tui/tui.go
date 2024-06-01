@@ -97,6 +97,8 @@ OUT:
 			buffer.Yank()
 		case Ctrl('w'):
 			buffer.Cut()
+		case Ctrl('d'):
+			buffer.DeleteAfter()
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
