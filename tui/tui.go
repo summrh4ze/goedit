@@ -115,6 +115,8 @@ OUT:
 				buffer.DeleteWordBefore()
 			case ' ':
 				buffer.ToggleMark()
+			case 'w':
+				buffer.Copy()
 			}
 		case goncurses.KEY_ENTER, 10:
 			if e.Minibuffer.Focused {

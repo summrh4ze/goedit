@@ -282,6 +282,23 @@ func (b *Buffer) DeleteToEnd() {
 	}
 }
 
+func (b *Buffer) Copy() {
+	b.killBuffer = b.killBuffer[0:0]
+	if !b.markActive {
+		return
+	}
+	if b.gapStart > b.markPos {
+		for i := b.markPos; i < b.gapStart; i++ {
+			b.killBuffer = append(b.killBuffer, b.content[i])
+		}
+	} else {
+		for i := b.gapEnd; i < b.markPosEnd; i++ {
+			b.killBuffer = append(b.killBuffer, b.content[i])
+		}
+	}
+	b.ToggleMark()
+}
+
 func (b *Buffer) Yank() {
 	if b.markActive {
 		b.ToggleMark()
