@@ -2,12 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/gbin/goncurses"
 	"org.example.goedit/editor"
 	"org.example.goedit/utils"
 )
+
+var graphical = regexp.MustCompile(`^[[:graph:][:space:]]*$`)
 
 type Tui struct {
 	bufferWindow     *goncurses.Window
@@ -113,7 +116,7 @@ OUT:
 				buffer.MoveEndFile()
 			case '<':
 				buffer.MoveStartFile()
-			case 127: // Alt-Backspace
+			case goncurses.KEY_BACKSPACE, 127: // Alt-Backspace
 				buffer.DeleteWordBefore()
 			case ' ':
 				buffer.ToggleMark()
@@ -135,10 +138,12 @@ OUT:
 		case goncurses.KEY_TAB:
 			buffer.Insert("\t")
 		default:
-			if e.Minibuffer.Focused {
-				e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
-			} else {
-				buffer.Insert(goncurses.KeyString(key))
+			if graphical.MatchString(goncurses.KeyString(key)) {
+				if e.Minibuffer.Focused {
+					e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
+				} else {
+					buffer.Insert(goncurses.KeyString(key))
+				}
 			}
 		}
 
@@ -167,6 +172,7 @@ func initTUI() (*Tui, error) {
 	goncurses.InitPair(3, 202, 200)
 
 	bufferWindow.ScrollOk(true)
+	bufferWindow.Keypad(true)
 
 	maxRows, maxCols := bufferWindow.MaxYX()
 	bufferWindow.Resize(maxRows-2, maxCols)
@@ -180,6 +186,7 @@ func initTUI() (*Tui, error) {
 	if err != nil {
 		return nil, err
 	}
+	minibufferWindow.Keypad(true)
 
 	bufferWindow.ColorOn(2)
 	bufferWindow.SetBackground(goncurses.ColorPair(2))
