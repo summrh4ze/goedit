@@ -2,11 +2,15 @@ package tui
 
 import (
 	"fmt"
+	"regexp"
+	"strings"
 
 	"github.com/gbin/goncurses"
 	"org.example.goedit/editor"
 	"org.example.goedit/utils"
 )
+
+var graphical = regexp.MustCompile(`^[[:graph:][:space:]]*$`)
 
 type Tui struct {
 	bufferWindow     *goncurses.Window
@@ -51,13 +55,13 @@ OUT:
 				}
 			}
 			ui.bufferWindow.Timeout(20)
-		case Ctrl('f'):
+		case Ctrl('f'), goncurses.KEY_RIGHT:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.MoveForward()
 			} else {
 				buffer.MoveForward()
 			}
-		case Ctrl('b'):
+		case Ctrl('b'), goncurses.KEY_LEFT:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.MoveBack()
 			} else {
@@ -66,10 +70,14 @@ OUT:
 		case Ctrl('g'):
 			if e.Minibuffer.Focused {
 				e.Minibuffer.RejectAction()
+			} else {
+				if buffer.IsMarkActive() {
+					buffer.ToggleMark()
+				}
 			}
-		case Ctrl('n'):
+		case Ctrl('n'), goncurses.KEY_DOWN:
 			buffer.MoveDown()
-		case Ctrl('p'):
+		case Ctrl('p'), goncurses.KEY_UP:
 			buffer.MoveUp()
 		case Ctrl('a'):
 			if e.Minibuffer.Focused {
@@ -83,6 +91,14 @@ OUT:
 			} else {
 				buffer.MoveEndLine()
 			}
+		case Ctrl('k'):
+			buffer.DeleteToEnd()
+		case Ctrl('y'):
+			buffer.Yank()
+		case Ctrl('w'):
+			buffer.Cut()
+		case Ctrl('d'):
+			buffer.DeleteAfter()
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
@@ -92,20 +108,44 @@ OUT:
 				} else {
 					buffer.MoveForwardWord()
 				}
+			case 'b':
+				if e.Minibuffer.Focused {
+					e.Minibuffer.MoveBackWord()
+				} else {
+					buffer.MoveBackWord()
+				}
+			case '>':
+				buffer.MoveEndFile()
+			case '<':
+				buffer.MoveStartFile()
+			case goncurses.KEY_BACKSPACE, 127: // Alt-Backspace
+				buffer.DeleteWordBefore()
+			case ' ':
+				buffer.ToggleMark()
+			case 'w':
+				buffer.Copy()
 			}
 		case goncurses.KEY_ENTER, 10:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.ConfirmAction()
+			} else {
+				buffer.Insert("\n")
 			}
 		case goncurses.KEY_BACKSPACE, 127, '\b':
 			if e.Minibuffer.Focused {
 				e.Minibuffer.DeleteAtCol()
-			}
-		default:
-			if e.Minibuffer.Focused {
-				e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
 			} else {
-				buffer.Insert(goncurses.KeyString(key))
+				buffer.DeleteBefore()
+			}
+		case goncurses.KEY_TAB:
+			buffer.Insert("\t")
+		default:
+			if graphical.MatchString(goncurses.KeyString(key)) {
+				if e.Minibuffer.Focused {
+					e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
+				} else {
+					buffer.Insert(goncurses.KeyString(key))
+				}
 			}
 		}
 
@@ -134,6 +174,7 @@ func initTUI() (*Tui, error) {
 	goncurses.InitPair(3, 202, 200)
 
 	bufferWindow.ScrollOk(true)
+	bufferWindow.Keypad(true)
 
 	maxRows, maxCols := bufferWindow.MaxYX()
 	bufferWindow.Resize(maxRows-2, maxCols)
@@ -147,6 +188,7 @@ func initTUI() (*Tui, error) {
 	if err != nil {
 		return nil, err
 	}
+	minibufferWindow.Keypad(true)
 
 	bufferWindow.ColorOn(2)
 	bufferWindow.SetBackground(goncurses.ColorPair(2))
@@ -180,29 +222,54 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Erase()
 
 	maxRows, _ := ui.bufferWindow.MaxYX()
-	if b.Cursor.Row >= b.BaseRow+maxRows {
-		b.BaseRow = (b.Cursor.Row + 1) - maxRows
-	} else if b.Cursor.Row < b.BaseRow {
-		b.BaseRow = b.Cursor.Row
-	}
 
-	digits := len(fmt.Sprint(len(b.Content)))
+	data, totalRows, cursor, mark := b.GetContent(maxRows, editor.TABSIZE)
+	lines := strings.Split(data, "\n")
 
-	lines := b.GetLines(maxRows)
+	digits := len(fmt.Sprint(totalRows))
 
 	for i, line := range lines {
-		if b.BaseRow+i == b.Cursor.Row {
+		if b.GetBaseRow()+i == cursor.Row {
 			ui.bufferWindow.ColorOn(2)
 		} else {
 			ui.bufferWindow.ColorOn(3)
 		}
-		ui.bufferWindow.MovePrintf(i, 0, "%*d ", digits, b.BaseRow+i)
+		ui.bufferWindow.MovePrintf(i, 0, "%*d ", digits, b.GetBaseRow()+i)
 		ui.bufferWindow.ColorOn(2)
-		ui.bufferWindow.MovePrintf(i, digits+1, "%s", utils.Texp(line, editor.TABSIZE))
+
+		for j, ch := range utils.Texp(line, editor.TABSIZE) {
+			if mark.Active {
+				//panic(fmt.Sprintf("%v\n", mark))
+				if mark.Cursor.Row < cursor.Row {
+					if b.GetBaseRow()+i > mark.Cursor.Row && b.GetBaseRow()+i < cursor.Row {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == mark.Cursor.Row && j >= mark.Cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == cursor.Row && j < cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					}
+				} else if mark.Cursor.Row > cursor.Row {
+					if b.GetBaseRow()+i > cursor.Row && b.GetBaseRow()+i < mark.Cursor.Row {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == mark.Cursor.Row && j <= mark.Cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					} else if b.GetBaseRow()+i == cursor.Row && j >= cursor.Col {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					}
+				} else if b.GetBaseRow()+i == mark.Cursor.Row {
+					if (mark.Cursor.Col <= j && cursor.Col > j) || (cursor.Col <= j && mark.Cursor.Col >= j) {
+						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
+					}
+				}
+			}
+			ui.bufferWindow.MovePrint(i, digits+1+j, string(ch))
+			ui.bufferWindow.AttrOff(goncurses.A_REVERSE)
+		}
+
 	}
 
 	// convert cursor to relative to rows boundary
-	ui.bufferWindow.Move(b.Cursor.Row-b.BaseRow, b.Cursor.Col+digits+1)
+	ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), cursor.Col+digits+1)
 }
 
 func (ui *Tui) displayStatusLine(b *editor.Buffer) {

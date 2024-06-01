@@ -3,7 +3,7 @@ package utils
 import "bytes"
 
 func IsDelimiter(b byte) bool {
-	delimiters := []byte(" `~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?")
+	delimiters := []byte(" `~!@#$%^&*()-=+[{]}\\|;:'\",.<>/?\t")
 	for _, c := range delimiters {
 		if b == c {
 			return true
@@ -68,4 +68,8 @@ func Texp(str string, tabsize int) string {
 		}
 	}
 	return res
+}
+
+func IsWhitespace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n'
 }
