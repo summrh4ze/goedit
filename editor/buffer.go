@@ -297,6 +297,31 @@ func (b *Buffer) Copy() {
 		}
 	}
 	b.ToggleMark()
+	b.parent.Minibuffer.SetMessage("Copied region")
+}
+
+func (b *Buffer) Cut() {
+	b.killBuffer = b.killBuffer[0:0]
+	if !b.markActive {
+		return
+	}
+
+	if b.gapStart > b.markPos {
+		for i := b.gapStart - 1; i >= b.markPos; i-- {
+			b.killBuffer = append(b.killBuffer, b.content[i])
+			b.gapStart -= 1
+		}
+		for i, j := 0, len(b.killBuffer)-1; i < j; i, j = i+1, j-1 {
+			b.killBuffer[i], b.killBuffer[j] = b.killBuffer[j], b.killBuffer[i]
+		}
+	} else {
+		for i := b.gapEnd; i < b.markPosEnd; i++ {
+			b.killBuffer = append(b.killBuffer, b.content[i])
+			b.gapEnd += 1
+		}
+	}
+	b.ToggleMark()
+	b.parent.Minibuffer.SetMessage("Cut region")
 }
 
 func (b *Buffer) Yank() {

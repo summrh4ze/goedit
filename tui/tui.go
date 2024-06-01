@@ -52,13 +52,13 @@ OUT:
 				}
 			}
 			ui.bufferWindow.Timeout(20)
-		case Ctrl('f'):
+		case Ctrl('f'), goncurses.KEY_RIGHT:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.MoveForward()
 			} else {
 				buffer.MoveForward()
 			}
-		case Ctrl('b'):
+		case Ctrl('b'), goncurses.KEY_LEFT:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.MoveBack()
 			} else {
@@ -72,9 +72,9 @@ OUT:
 					buffer.ToggleMark()
 				}
 			}
-		case Ctrl('n'):
+		case Ctrl('n'), goncurses.KEY_DOWN:
 			buffer.MoveDown()
-		case Ctrl('p'):
+		case Ctrl('p'), goncurses.KEY_UP:
 			buffer.MoveUp()
 		case Ctrl('a'):
 			if e.Minibuffer.Focused {
@@ -92,6 +92,8 @@ OUT:
 			buffer.DeleteToEnd()
 		case Ctrl('y'):
 			buffer.Yank()
+		case Ctrl('w'):
+			buffer.Cut()
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
