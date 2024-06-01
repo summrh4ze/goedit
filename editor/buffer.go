@@ -187,6 +187,10 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor, Mark) 
 }
 
 func (b *Buffer) Insert(str string) {
+	if b.markActive {
+		b.deleteToMark()
+	}
+
 	if b.gapEnd-b.gapStart < GAP_THRESHOLD {
 		b.resizeGap()
 	}
@@ -197,7 +201,25 @@ func (b *Buffer) Insert(str string) {
 	b.updateLinePosMem()
 }
 
+func (b *Buffer) deleteToMark() {
+	if b.gapStart > b.markPos {
+		for i := b.gapStart - 1; i >= b.markPos; i-- {
+			b.gapStart -= 1
+		}
+	} else {
+		for i := b.gapEnd; i < b.markPosEnd; i++ {
+			b.gapEnd += 1
+		}
+	}
+	b.ToggleMark()
+	b.updateLinePosMem()
+}
+
 func (b *Buffer) DeleteBefore() {
+	if b.markActive {
+		b.deleteToMark()
+		return
+	}
 	if b.gapStart > 0 {
 		b.gapStart -= 1
 		b.updateLinePosMem()
@@ -206,6 +228,10 @@ func (b *Buffer) DeleteBefore() {
 
 func (b *Buffer) DeleteWordBefore() {
 	if b.gapStart == 0 {
+		return
+	}
+	if b.markActive {
+		b.deleteToMark()
 		return
 	}
 	if b.content[b.gapStart-1] == '\n' {
@@ -240,6 +266,9 @@ func (b *Buffer) DeleteWordBefore() {
 }
 
 func (b *Buffer) DeleteToEnd() {
+	if b.markActive {
+		b.ToggleMark()
+	}
 	b.killBuffer = b.killBuffer[0:0]
 	if b.gapEnd < len(b.content) {
 		for i := b.gapEnd; i <= len(b.content); i++ {
@@ -254,6 +283,10 @@ func (b *Buffer) DeleteToEnd() {
 }
 
 func (b *Buffer) Yank() {
+	if b.markActive {
+		b.ToggleMark()
+		return
+	}
 	for _, ch := range b.killBuffer {
 		b.Insert(string(ch))
 	}

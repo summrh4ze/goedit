@@ -232,7 +232,7 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
 					} else if b.GetBaseRow()+i == mark.Cursor.Row && j >= mark.Cursor.Col {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
-					} else if b.GetBaseRow()+i == cursor.Row && j <= cursor.Col {
+					} else if b.GetBaseRow()+i == cursor.Row && j < cursor.Col {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
 					}
 				} else if mark.Cursor.Row > cursor.Row {
