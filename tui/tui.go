@@ -98,7 +98,9 @@ OUT:
 		case Ctrl('w'):
 			buffer.Cut()
 		case Ctrl('d'):
-			buffer.DeleteAfter()
+			buffer.DeleteAfter(true)
+		case Ctrl('u'):
+			buffer.Undo()
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
@@ -129,7 +131,7 @@ OUT:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.ConfirmAction()
 			} else {
-				buffer.Insert("\n")
+				buffer.Insert("\n", true)
 			}
 		case goncurses.KEY_BACKSPACE, 127, '\b':
 			if e.Minibuffer.Focused {
@@ -138,13 +140,13 @@ OUT:
 				buffer.DeleteBefore()
 			}
 		case goncurses.KEY_TAB:
-			buffer.Insert("\t")
+			buffer.Insert("\t", true)
 		default:
 			if graphical.MatchString(goncurses.KeyString(key)) {
 				if e.Minibuffer.Focused {
 					e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
 				} else {
-					buffer.Insert(goncurses.KeyString(key))
+					buffer.Insert(goncurses.KeyString(key), true)
 				}
 			}
 		}
@@ -257,7 +259,7 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
 					}
 				} else if b.GetBaseRow()+i == mark.Cursor.Row {
-					if (mark.Cursor.Col <= j && cursor.Col > j) || (cursor.Col <= j && mark.Cursor.Col >= j) {
+					if (mark.Cursor.Col <= j && cursor.Col > j) || (cursor.Col <= j && mark.Cursor.Col > j) {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
 					}
 				}
