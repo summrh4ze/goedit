@@ -223,7 +223,7 @@ func (ui *Tui) displayEditor(e *editor.Editor) {
 func (ui *Tui) displayBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Erase()
 
-	maxRows, _ := ui.bufferWindow.MaxYX()
+	maxRows, maxCols := ui.bufferWindow.MaxYX()
 
 	data, totalRows, cursor, mark := b.GetContent(maxRows, editor.TABSIZE)
 	lines := strings.Split(data, "\n")
@@ -264,14 +264,27 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 					}
 				}
 			}
-			ui.bufferWindow.MovePrint(i, digits+1+j, string(ch))
+			if digits+1+cursor.Col >= maxCols {
+				surplus := ((digits + 1 + cursor.Col) - maxCols) + 1
+				if j < surplus {
+					continue
+				} else {
+					ui.bufferWindow.MovePrint(i, digits+1+(j-surplus), string(ch))
+				}
+			} else {
+				ui.bufferWindow.MovePrint(i, digits+1+j, string(ch))
+			}
 			ui.bufferWindow.AttrOff(goncurses.A_REVERSE)
 		}
 
 	}
 
 	// convert cursor to relative to rows boundary
-	ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), cursor.Col+digits+1)
+	if digits+1+cursor.Col >= maxCols {
+		ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), maxCols-1)
+	} else {
+		ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), cursor.Col+digits+1)
+	}
 }
 
 func (ui *Tui) displayStatusLine(b *editor.Buffer) {
