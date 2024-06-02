@@ -10,6 +10,7 @@ import (
 const (
 	GAP_LEN       = 1000
 	GAP_THRESHOLD = 10
+	UNDO_SIZE     = 1000
 )
 
 type Cursor struct {
@@ -31,10 +32,10 @@ type Buffer struct {
 	baseRow      int
 	markActive   bool
 	markPos      int
-	markPosEnd   int
 	killBuffer   []byte
 	ReadOnlyMode bool
 	Name         string
+	undo         *UndoStack
 }
 
 func NewEmptyBuffer(parent *Editor) *Buffer {
@@ -48,6 +49,7 @@ func NewEmptyBuffer(parent *Editor) *Buffer {
 		ReadOnlyMode: false,
 		gapStart:     0,
 		gapEnd:       GAP_LEN,
+		undo:         NewUndo(UNDO_SIZE),
 	}
 }
 
@@ -58,6 +60,7 @@ func NewBuffer(parent *Editor, name string, content []byte, readOnly bool) *Buff
 			Name:         name,
 			content:      content,
 			ReadOnlyMode: true,
+			undo:         NewUndo(0),
 		}
 	} else {
 		buf := make([]byte, GAP_LEN, len(content)+GAP_LEN)
@@ -69,6 +72,7 @@ func NewBuffer(parent *Editor, name string, content []byte, readOnly bool) *Buff
 			ReadOnlyMode: false,
 			gapStart:     0,
 			gapEnd:       GAP_LEN,
+			undo:         NewUndo(UNDO_SIZE),
 		}
 	}
 }
@@ -84,11 +88,9 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor, Mark) 
 	mark := Mark{}
 	newLinesPos := make([]int, 0)
 
-	markPos := 0
-	if b.gapStart > b.markPos {
-		markPos = b.markPos
-	} else {
-		markPos = b.markPosEnd
+	markPos := b.markPos
+	if b.gapStart < b.markPos {
+		markPos = b.markPos + (b.gapEnd - b.gapStart)
 	}
 
 	nonTabs := 0
@@ -186,7 +188,7 @@ func (b *Buffer) GetContent(count int, tabsize int) (string, int, Cursor, Mark) 
 	return string(resBuf), totalRows, cursor, mark
 }
 
-func (b *Buffer) Insert(str string) {
+func (b *Buffer) Insert(str string, withUndo bool) {
 	if b.markActive {
 		b.deleteToMark()
 	}
@@ -197,17 +199,27 @@ func (b *Buffer) Insert(str string) {
 	for i, ch := range []byte(str) {
 		b.content[b.gapStart+i] = ch
 	}
+	forceNewEvent := false
+	if str == "\n" {
+		forceNewEvent = true
+	}
+	if withUndo {
+		b.undo.EmitEvent(INSERT_EVENT, b.gapStart, "", forceNewEvent)
+	}
 	b.gapStart = b.gapStart + len(str)
 	b.updateLinePosMem()
 }
 
 func (b *Buffer) deleteToMark() {
+	gapLen := b.gapEnd - b.gapStart
 	if b.gapStart > b.markPos {
 		for i := b.gapStart - 1; i >= b.markPos; i-- {
 			b.gapStart -= 1
+			b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[b.gapStart]), false)
 		}
 	} else {
-		for i := b.gapEnd; i < b.markPosEnd; i++ {
+		for i := b.gapEnd; i < b.markPos+gapLen; i++ {
+			b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[b.gapEnd]), false)
 			b.gapEnd += 1
 		}
 	}
@@ -221,17 +233,21 @@ func (b *Buffer) DeleteBefore() {
 		return
 	}
 	if b.gapStart > 0 {
+		b.undo.EmitEvent(DELETE_EVENT, b.gapStart-1, string(b.content[b.gapStart-1]), false)
 		b.gapStart -= 1
 		b.updateLinePosMem()
 	}
 }
 
-func (b *Buffer) DeleteAfter() {
+func (b *Buffer) DeleteAfter(withUndo bool) {
 	if b.markActive {
 		b.deleteToMark()
 		return
 	}
 	if b.gapEnd < len(b.content) {
+		if withUndo {
+			b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[b.gapEnd]), false)
+		}
 		b.gapEnd += 1
 		b.updateLinePosMem()
 	}
@@ -247,6 +263,7 @@ func (b *Buffer) DeleteWordBefore() {
 	}
 	if b.content[b.gapStart-1] == '\n' {
 		b.gapStart -= 1
+		b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[b.gapStart]), false)
 		return
 	} else if utils.IsWhitespace(b.content[b.gapStart-1]) {
 		for i := b.gapStart - 1; i >= -1; i-- {
@@ -255,6 +272,7 @@ func (b *Buffer) DeleteWordBefore() {
 			} else {
 				if utils.IsWhitespace(b.content[i]) {
 					b.gapStart -= 1
+					b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[b.gapStart]), false)
 				} else {
 					break
 				}
@@ -267,11 +285,13 @@ func (b *Buffer) DeleteWordBefore() {
 			} else {
 				if !utils.IsWhitespace(b.content[i]) {
 					b.gapStart -= 1
+					b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[b.gapStart]), false)
 				} else {
 					break
 				}
 			}
 		}
+
 	}
 	b.updateLinePosMem()
 }
@@ -288,6 +308,7 @@ func (b *Buffer) DeleteToEnd() {
 			} else {
 				b.killBuffer = append(b.killBuffer, b.content[i])
 				b.gapEnd += 1
+				b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[i]), false)
 			}
 		}
 	}
@@ -303,7 +324,8 @@ func (b *Buffer) Copy() {
 			b.killBuffer = append(b.killBuffer, b.content[i])
 		}
 	} else {
-		for i := b.gapEnd; i < b.markPosEnd; i++ {
+		gapLen := b.gapEnd - b.gapStart
+		for i := b.gapEnd; i < b.markPos+gapLen; i++ {
 			b.killBuffer = append(b.killBuffer, b.content[i])
 		}
 	}
@@ -321,14 +343,17 @@ func (b *Buffer) Cut() {
 		for i := b.gapStart - 1; i >= b.markPos; i-- {
 			b.killBuffer = append(b.killBuffer, b.content[i])
 			b.gapStart -= 1
+			b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[i]), false)
 		}
 		for i, j := 0, len(b.killBuffer)-1; i < j; i, j = i+1, j-1 {
 			b.killBuffer[i], b.killBuffer[j] = b.killBuffer[j], b.killBuffer[i]
 		}
 	} else {
-		for i := b.gapEnd; i < b.markPosEnd; i++ {
+		gapLen := b.gapEnd - b.gapStart
+		for i := b.gapEnd; i < b.markPos+gapLen; i++ {
 			b.killBuffer = append(b.killBuffer, b.content[i])
 			b.gapEnd += 1
+			b.undo.EmitEvent(DELETE_EVENT, b.gapStart, string(b.content[i]), false)
 		}
 	}
 	b.ToggleMark()
@@ -341,7 +366,7 @@ func (b *Buffer) Yank() {
 		return
 	}
 	for _, ch := range b.killBuffer {
-		b.Insert(string(ch))
+		b.Insert(string(ch), true)
 	}
 }
 
@@ -352,7 +377,6 @@ func (b *Buffer) IsMarkActive() bool {
 func (b *Buffer) ToggleMark() {
 	b.markActive = !b.markActive
 	b.markPos = b.gapStart
-	b.markPosEnd = b.gapEnd
 	if b.markActive {
 		b.parent.Minibuffer.SetMessage("Mark set")
 	} else {
@@ -598,4 +622,38 @@ func (b *Buffer) MoveStartFile() {
 func (b *Buffer) MoveEndFile() {
 	b.shiftGapRight(len(b.content) - b.gapEnd)
 	b.updateLinePosMem()
+}
+
+func (b *Buffer) Undo() {
+	if b.markActive {
+		b.ToggleMark()
+	}
+	ev, err := b.undo.PopUndoEvent()
+	if err != nil {
+		b.parent.Minibuffer.SetMessage(err.Error())
+		return
+	} else {
+		switch ev.Type {
+		case INSERT_EVENT:
+			if b.gapStart > ev.Pos {
+				b.shiftGapLeft(b.gapStart - ev.Pos)
+				for i := 0; i < ev.NumChar; i++ {
+					b.DeleteAfter(false)
+				}
+			} else {
+				b.shiftGapRight(ev.Pos - b.gapStart)
+				for i := 0; i < ev.NumChar; i++ {
+					b.DeleteAfter(false)
+				}
+			}
+		case DELETE_EVENT:
+			if b.gapStart > ev.Pos {
+				b.shiftGapLeft(b.gapStart - ev.Pos)
+				b.Insert(ev.StoredText, false)
+			} else {
+				b.shiftGapRight(ev.Pos - b.gapStart)
+				b.Insert(ev.StoredText, false)
+			}
+		}
+	}
 }

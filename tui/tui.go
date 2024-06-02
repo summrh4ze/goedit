@@ -98,7 +98,9 @@ OUT:
 		case Ctrl('w'):
 			buffer.Cut()
 		case Ctrl('d'):
-			buffer.DeleteAfter()
+			buffer.DeleteAfter(true)
+		case Ctrl('u'):
+			buffer.Undo()
 		case 27: // Alt-<?>
 			secondKey := ui.bufferWindow.GetChar()
 			switch secondKey {
@@ -129,7 +131,7 @@ OUT:
 			if e.Minibuffer.Focused {
 				e.Minibuffer.ConfirmAction()
 			} else {
-				buffer.Insert("\n")
+				buffer.Insert("\n", true)
 			}
 		case goncurses.KEY_BACKSPACE, 127, '\b':
 			if e.Minibuffer.Focused {
@@ -138,13 +140,13 @@ OUT:
 				buffer.DeleteBefore()
 			}
 		case goncurses.KEY_TAB:
-			buffer.Insert("\t")
+			buffer.Insert("\t", true)
 		default:
 			if graphical.MatchString(goncurses.KeyString(key)) {
 				if e.Minibuffer.Focused {
 					e.Minibuffer.InsertAtCol(goncurses.KeyString(key))
 				} else {
-					buffer.Insert(goncurses.KeyString(key))
+					buffer.Insert(goncurses.KeyString(key), true)
 				}
 			}
 		}
@@ -221,7 +223,7 @@ func (ui *Tui) displayEditor(e *editor.Editor) {
 func (ui *Tui) displayBuffer(b *editor.Buffer) {
 	ui.bufferWindow.Erase()
 
-	maxRows, _ := ui.bufferWindow.MaxYX()
+	maxRows, maxCols := ui.bufferWindow.MaxYX()
 
 	data, totalRows, cursor, mark := b.GetContent(maxRows, editor.TABSIZE)
 	lines := strings.Split(data, "\n")
@@ -257,19 +259,32 @@ func (ui *Tui) displayBuffer(b *editor.Buffer) {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
 					}
 				} else if b.GetBaseRow()+i == mark.Cursor.Row {
-					if (mark.Cursor.Col <= j && cursor.Col > j) || (cursor.Col <= j && mark.Cursor.Col >= j) {
+					if (mark.Cursor.Col <= j && cursor.Col > j) || (cursor.Col <= j && mark.Cursor.Col > j) {
 						ui.bufferWindow.AttrOn(goncurses.A_REVERSE)
 					}
 				}
 			}
-			ui.bufferWindow.MovePrint(i, digits+1+j, string(ch))
+			if digits+1+cursor.Col >= maxCols {
+				surplus := ((digits + 1 + cursor.Col) - maxCols) + 1
+				if j < surplus {
+					continue
+				} else {
+					ui.bufferWindow.MovePrint(i, digits+1+(j-surplus), string(ch))
+				}
+			} else {
+				ui.bufferWindow.MovePrint(i, digits+1+j, string(ch))
+			}
 			ui.bufferWindow.AttrOff(goncurses.A_REVERSE)
 		}
 
 	}
 
 	// convert cursor to relative to rows boundary
-	ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), cursor.Col+digits+1)
+	if digits+1+cursor.Col >= maxCols {
+		ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), maxCols-1)
+	} else {
+		ui.bufferWindow.Move(cursor.Row-b.GetBaseRow(), cursor.Col+digits+1)
+	}
 }
 
 func (ui *Tui) displayStatusLine(b *editor.Buffer) {
